@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+pytest
+httpx
+tree-sitter
+tree-sitter-python
+chromadb
+sentence-transformers
+neo4j
+GitPython
+requests
+python-dotenv

@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / Frontend
+node_modules/
+.npm/
+
+# Environment files
+.env
+.env.local
+
+# Databases, Repositories and Data
+data/
+*.chroma
+*.db
+*.sqlite
+
+# OS and Editor files
+.DS_Store
+.vscode/
+.idea/
