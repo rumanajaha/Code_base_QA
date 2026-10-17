@@ -1,14 +1,23 @@
+# Build and run the backend API
 fastapi
 uvicorn
+# Validate data and load application settings
 pydantic
 pydantic-settings
+# Test Python code and API endpoints
 pytest
 httpx
+# Parse Python source code
 tree-sitter
 tree-sitter-python
+# Store and search code embeddings
 chromadb
 sentence-transformers
+# Store and query dependency relationships
 neo4j
+
+# Work with repositories and HTTP requests
 GitPython
 requests
+# Load environment variables from a .env file
 python-dotenv
