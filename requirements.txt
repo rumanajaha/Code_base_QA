@@ -21,3 +21,4 @@ GitPython
 requests
 # Load environment variables from a .env file
 python-dotenv
+openai
