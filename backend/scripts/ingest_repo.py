@@ -1,9 +1,13 @@
 """Clone or use a local repository, chunk its Python files, and index them."""
 
 import argparse
+import sys
 import time
 from collections import Counter
+
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.indexing.vector_store import VectorStore
 from app.ingestion.file_filter import list_source_files
