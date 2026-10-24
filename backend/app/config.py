@@ -6,6 +6,9 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables and .env file."""
 
     LLM_API_KEY: str = ""
+    LLM_PROVIDER: str = "openai"
+    LLM_BASE_URL: str = ""
+    LLM_CACHE_ENABLED: bool = True
     LLM_MODEL: str = "gpt-4o-mini"
     EMBEDDING_MODEL: str = "sentence-transformers/all-mpnet-base-v2"
     NEO4J_URI: str = "bolt://localhost:7687"
