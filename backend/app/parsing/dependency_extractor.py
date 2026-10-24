@@ -6,6 +6,7 @@ and constructs a symbol table of local aliases for downstream call extraction.
 """
 from __future__ import annotations
 
+import builtins
 from dataclasses import dataclass, field
 import sys
 
@@ -21,7 +22,7 @@ except ImportError as err:
     )
     sys.exit(1)
 
-from app.models import Edge
+from app.models import Chunk, Edge
 
 _LANGUAGE = Language(tspython.language())
 
@@ -269,3 +270,228 @@ def extract_import_edges(repo_id: str, files: dict[str, str]) -> list[Edge]:
 def count_external_imports(files: dict[str, str]) -> int:
     """Return the total count of external and standard-library imports across files."""
     return extract_imports("temp", files).external_imports_count
+
+
+# Common built-in functions and standard container methods to exclude from unresolved calls
+_BUILTIN_NAMES = set(dir(builtins))
+_COMMON_BUILTIN_METHODS = {
+    "append", "clear", "extend", "insert", "pop", "remove", "count", "index",
+    "copy", "sort", "reverse", "get", "keys", "values", "items", "update",
+    "split", "join", "strip", "lstrip", "rstrip", "lower", "upper",
+    "startswith", "endswith", "replace", "encode", "decode", "read", "write", "close"
+}
+
+
+def extract_call_edges(
+    repo_id: str,
+    chunks: list[Chunk],
+    files: dict[str, str],
+    import_maps: dict[str, dict[str, str]],
+) -> tuple[list[Edge], dict[str, Any]]:
+    """Extract CALLS relationships between functions/methods inside a repository.
+
+    Resolution order (stops at the first match):
+      1. self.foo()  -> method named foo in the same enclosing class
+      2. foo()       -> function in the same file with that name, or imported via import_map
+      3. alias.foo() -> function foo in the module that alias refers to
+      4. foo()       -> function with that exact unique name anywhere in the repo
+                        (only if exactly one exists; no guessing on ambiguity)
+
+    Returns:
+      (edges, stats) where stats has {resolved, unresolved, ignored_dynamic, unresolved_examples}.
+    """
+    parser = _get_parser()
+    func_chunks = [c for c in chunks if c.node_type in ("function", "method")]
+
+    # Build fast lookup indexes
+    funcs_by_file_and_name: dict[tuple[str, str], list[Chunk]] = {}
+    funcs_by_name: dict[str, list[Chunk]] = {}
+    methods_by_class: dict[tuple[str, str, str], Chunk] = {}
+    chunks_by_qname = {c.qualified_name: c for c in func_chunks}
+
+    for c in func_chunks:
+        norm_file = _normalize_path(c.file_path)
+        funcs_by_file_and_name.setdefault((norm_file, c.name), []).append(c)
+        funcs_by_name.setdefault(c.name, []).append(c)
+        if c.node_type == "method" and c.parent_name:
+            methods_by_class[(norm_file, c.parent_name, c.name)] = c
+
+    # Normalize import maps keys
+    norm_import_maps = {_normalize_path(k): v for k, v in import_maps.items()}
+
+    resolved_pairs: set[tuple[str, str]] = set()
+    unresolved_examples: list[dict[str, Any]] = []
+    ignored_dynamic_count = 0
+    resolved_count = 0
+
+    for caller in func_chunks:
+        norm_file = _normalize_path(caller.file_path)
+        file_map = norm_import_maps.get(norm_file, {})
+
+        code_bytes = caller.code.encode("utf-8", errors="replace")
+        tree = parser.parse(code_bytes)
+
+        # Detect nested helper functions defined locally inside caller body
+        local_funcs: dict[str, str] = {}
+        for root_child in tree.root_node.named_children:
+            if root_child.type in ("function_definition", "async_function_definition"):
+                body = root_child.child_by_field_name("body")
+                if body:
+                    for b_child in body.named_children:
+                        if b_child.type in ("function_definition", "async_function_definition"):
+                            n_name_node = b_child.child_by_field_name("name")
+                            if n_name_node:
+                                n_name = n_name_node.text.decode("utf-8")
+                                local_funcs[n_name] = f"{caller.qualified_name}.{n_name}"
+
+        # Collect call nodes in caller, skipping any nested class bodies
+        call_nodes: list[Node] = []
+        stack = [tree.root_node]
+        while stack:
+            curr = stack.pop()
+            if curr.type == "class_definition" and curr != tree.root_node:
+                continue
+            if curr.type == "call":
+                call_nodes.append(curr)
+            stack.extend(reversed(curr.children))
+
+        for call_node in call_nodes:
+            fn = call_node.child_by_field_name("function")
+            if not fn:
+                continue
+
+            call_text = code_bytes[call_node.start_byte : call_node.end_byte].decode("utf-8")
+
+            # ---------------------------------------------------------
+            # Form A: Plain identifier call: foo(...)
+            # ---------------------------------------------------------
+            if fn.type == "identifier":
+                foo = fn.text.decode("utf-8")
+
+                # Skip built-in functions like len(), sum(), max()
+                if foo in _BUILTIN_NAMES:
+                    ignored_dynamic_count += 1
+                    continue
+
+                # 2a. Check nested helper function
+                if foo in local_funcs:
+                    resolved_pairs.add((caller.qualified_name, local_funcs[foo]))
+                    resolved_count += 1
+                    continue
+
+                # 2b. Check function in the same file
+                same_file_matches = funcs_by_file_and_name.get((norm_file, foo), [])
+                if same_file_matches:
+                    resolved_pairs.add((caller.qualified_name, same_file_matches[0].qualified_name))
+                    resolved_count += 1
+                    continue
+
+                # 2c. Check name imported via import_map
+                if foo in file_map:
+                    target_qname = file_map[foo]
+                    if target_qname in chunks_by_qname:
+                        resolved_pairs.add((caller.qualified_name, target_qname))
+                        resolved_count += 1
+                        continue
+                    else:
+                        ignored_dynamic_count += 1
+                        continue
+
+                # 4. Check exact unique function name anywhere in repository
+                candidates = funcs_by_name.get(foo, [])
+                if len(candidates) == 1:
+                    resolved_pairs.add((caller.qualified_name, candidates[0].qualified_name))
+                    resolved_count += 1
+                    continue
+                else:
+                    # Unresolved (0 candidates or >1 ambiguous candidates)
+                    unresolved_examples.append(
+                        {
+                            "caller": caller.qualified_name,
+                            "callee": foo,
+                            "expression": call_text,
+                            "reason": "ambiguous" if len(candidates) > 1 else "not_found",
+                        }
+                    )
+
+            # ---------------------------------------------------------
+            # Form B: Attribute call: self.foo(...) or alias.foo(...)
+            # ---------------------------------------------------------
+            elif fn.type == "attribute":
+                obj = fn.child_by_field_name("object")
+                attr = fn.child_by_field_name("attribute")
+                if not obj or not attr:
+                    ignored_dynamic_count += 1
+                    continue
+
+                foo = attr.text.decode("utf-8")
+
+                # 1. self.foo() -> method named foo in the same class
+                if obj.type == "identifier" and obj.text.decode("utf-8") == "self":
+                    if caller.parent_name:
+                        m = methods_by_class.get((norm_file, caller.parent_name, foo))
+                        if m:
+                            resolved_pairs.add((caller.qualified_name, m.qualified_name))
+                            resolved_count += 1
+                            continue
+
+                    unresolved_examples.append(
+                        {
+                            "caller": caller.qualified_name,
+                            "callee": f"self.{foo}",
+                            "expression": call_text,
+                            "reason": "method_not_found_in_class",
+                        }
+                    )
+                    continue
+
+                # 3. alias.foo() -> function in module that alias refers to
+                obj_name = obj.text.decode("utf-8") if obj.type == "identifier" else ""
+                if obj_name in file_map:
+                    target_mod = file_map[obj_name]
+                    target_qname = f"{target_mod}.{foo}"
+                    if target_qname in chunks_by_qname:
+                        resolved_pairs.add((caller.qualified_name, target_qname))
+                        resolved_count += 1
+                        continue
+                    else:
+                        ignored_dynamic_count += 1
+                        continue
+
+                # Method on class instance in same file or unique method in repo (e.g. cart.calculate_total)
+                if foo not in _COMMON_BUILTIN_METHODS:
+                    cand = funcs_by_name.get(foo, [])
+                    if len(cand) == 1 and cand[0].node_type == "method":
+                        resolved_pairs.add((caller.qualified_name, cand[0].qualified_name))
+                        resolved_count += 1
+                        continue
+
+                # Anything else is arbitrary instance method (e.g. items.append) -> ignored dynamic
+                ignored_dynamic_count += 1
+
+            # ---------------------------------------------------------
+            # Form C: Complex or dynamic expressions
+            # ---------------------------------------------------------
+            else:
+                ignored_dynamic_count += 1
+
+    edges = [
+        Edge(
+            repo_id=repo_id,
+            source_qualified_name=source,
+            target_qualified_name=target,
+            type="CALLS",
+            resolved=True,
+        )
+        for source, target in sorted(resolved_pairs)
+    ]
+
+    stats: dict[str, Any] = {
+        "resolved": resolved_count,
+        "unresolved": len(unresolved_examples),
+        "ignored_dynamic": ignored_dynamic_count,
+        "unresolved_examples": unresolved_examples,
+    }
+
+    return edges, stats
+
