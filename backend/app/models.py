@@ -74,6 +74,7 @@ class RepoStatus(BaseModel):
     graph_edges: int = 0
     unresolved_calls: int = 0
     error: str | None = None
+    repo_url: str | None = None
 
 
 class QueryRequest(BaseModel):
