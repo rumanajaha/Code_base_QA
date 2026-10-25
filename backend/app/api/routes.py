@@ -64,11 +64,13 @@ def get_all_repositories() -> list[RepoStatus]:
 )
 def get_repository_status(repo_id: str) -> RepoStatus:
     repo_status = get_status(repo_id)
+
     if not repo_status:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository '{repo_id}' not found",
         )
+
     return repo_status
 
 
@@ -83,6 +85,7 @@ def reindex_repository(
     background_tasks: BackgroundTasks,
 ) -> RepoCreateResponse:
     repo_status = get_status(repo_id)
+
     if not repo_status:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -90,12 +93,17 @@ def reindex_repository(
         )
 
     update_status(repo_id, state="queued", error=None)
-    url = repo_status.repo_url or f"https://github.com/{repo_id.replace('__', '/')}"
+
+    url = repo_status.repo_url or (
+        f"https://github.com/{repo_id.replace('__', '/')}"
+    )
+
     background_tasks.add_task(
         run_ingestion_task,
         source=url,
         repo_id=repo_id,
     )
+
     return RepoCreateResponse(repo_id=repo_id)
 
 
@@ -109,12 +117,6 @@ def query_repository(req: QueryRequest):
             detail=f"Repository '{req.repo_id}' not found",
         )
 
-    if req.mode == "adaptive":
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="Adaptive query mode is not implemented yet",
-        )
-
     if repo_status.state != "ready":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -122,13 +124,20 @@ def query_repository(req: QueryRequest):
         )
 
     question = req.question.strip()
+
     if not 3 <= len(question) <= 1000:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Question must contain between 3 and 1000 characters",
         )
 
     req.question = question
+
+    if req.mode == "adaptive":
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Adaptive query mode is not implemented yet",
+        )
 
     try:
         return run_query(req)
@@ -150,6 +159,7 @@ def get_repository_code(
     end: int = Query(..., ge=1),
 ):
     repo_status = get_status(repo_id)
+
     if repo_status is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -194,7 +204,11 @@ def get_repository_code(
         )
 
     try:
-        with target.open("r", encoding="utf-8", errors="replace") as source:
+        with target.open(
+            "r",
+            encoding="utf-8",
+            errors="replace",
+        ) as source:
             lines = source.readlines()
     except OSError as exc:
         raise HTTPException(
@@ -203,7 +217,10 @@ def get_repository_code(
         ) from exc
 
     selected = [
-        {"n": line_number, "text": lines[line_number - 1].rstrip("\r\n")}
+        {
+            "n": line_number,
+            "text": lines[line_number - 1].rstrip("\r\n"),
+        }
         for line_number in range(start, min(end, len(lines)) + 1)
     ]
 
