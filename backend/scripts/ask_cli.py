@@ -18,7 +18,7 @@ def main() -> None:
     parser.add_argument("question", help="Question about the repository")
     parser.add_argument(
         "--mode",
-        choices=["baseline", "semantic"],
+        choices=["baseline", "semantic", "hybrid"],
         default="semantic",
         help="Answering mode (default: semantic)",
     )
@@ -50,10 +50,15 @@ def main() -> None:
     if answer.retrieved:
         for item in answer.retrieved:
             chunk = item.chunk
+            if item.source == "graph" and item.via:
+                source_str = f"graph via {item.via}"
+            else:
+                score_str = f"{item.score:.2f}" if item.score is not None else "N/A"
+                source_str = f"semantic {score_str}"
             print(
                 f"  [{item.rank}] "
                 f"{chunk.file_path}:{chunk.start_line}-{chunk.end_line} "
-                f"(score={item.score})"
+                f"({source_str})"
             )
             print(f"      {chunk.qualified_name}")
     else:

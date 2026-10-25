@@ -43,7 +43,7 @@ def generate(prompt: str, system: str | None = None) -> tuple[str, int | None]:
     provider = settings.LLM_PROVIDER.lower()
     model = settings.LLM_MODEL
 
-    if provider not in {"openai", "anthropic"}:
+    if provider not in {"openai", "openai_compatible", "anthropic"}:
         raise ValueError(f"Unsupported LLM provider: {provider}")
 
     key = _cache_key(provider, model, system, prompt)

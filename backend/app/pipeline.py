@@ -7,6 +7,11 @@ from app.generation.llm_client import generate
 from app.generation.prompts import SYSTEM_PROMPT, build_prompt
 from app.indexing.vector_store import VectorStore
 from app.models import Answer, QueryRequest
+from app.retrieval.hybrid import retrieve_hybrid
+
+HYBRID_K = 5
+HYBRID_M = 4
+HYBRID_DIRECTION = "both"
 
 
 BASELINE_SYSTEM_PROMPT = (
@@ -72,9 +77,37 @@ def answer_semantic(
     )
 
 
-def answer_hybrid(repo_id: str, question: str, k: int = 5) -> Answer:
-    """Hybrid retrieval pipeline; implementation will be added later."""
-    raise NotImplementedError("Hybrid pipeline has not been implemented yet")
+def answer_hybrid(repo_id: str, question: str) -> Answer:
+    """Retrieve code chunks using semantic search and graph expansion, then answer."""
+    started = time.perf_counter()
+
+    retrieved = retrieve_hybrid(
+        repo_id=repo_id,
+        question=question,
+        k=HYBRID_K,
+        m=HYBRID_M,
+        direction=HYBRID_DIRECTION,
+    )
+
+    prompt = build_prompt(question, retrieved)
+    text, tokens_used = generate(
+        prompt=prompt,
+        system=SYSTEM_PROMPT,
+    )
+
+    citations = parse_citations(text, retrieved)
+    elapsed_ms = round((time.perf_counter() - started) * 1000)
+
+    return Answer(
+        text=text,
+        citations=citations,
+        retrieved=retrieved,
+        low_confidence=False,
+        unsupported_items=[],
+        mode="hybrid",
+        latency_ms=elapsed_ms,
+        tokens_used=tokens_used,
+    )
 
 
 def answer_adaptive(repo_id: str, question: str, k: int = 5) -> Answer:
