@@ -29,7 +29,6 @@ class VectorStore:
 
     def add_chunks(self, chunks: list[Chunk]) -> None:
         """Replace this repository's collection contents with the supplied chunks."""
-        # Delete and recreate to make repeated ingestion idempotent.
         try:
             self.client.delete_collection(self.collection_name)
         except Exception:
@@ -54,8 +53,12 @@ class VectorStore:
             documents=texts,
             embeddings=embeddings,
             metadatas=[
-            {key: value for key, value in chunk.model_dump().items() if value is not None}
-             for chunk in chunks
+                {
+                    key: value
+                    for key, value in chunk.model_dump().items()
+                    if value is not None
+                }
+                for chunk in chunks
             ],
         )
 
@@ -101,3 +104,76 @@ class VectorStore:
             self.client.delete_collection(self.collection_name)
         except Exception:
             pass
+
+    def get_chunks_with_embeddings(
+        self, qualified_names: list[str]
+    ) -> list[tuple[Chunk, list[float]]]:
+        """Fetch stored chunks and embeddings by qualified name."""
+        if not qualified_names:
+            return []
+
+        results = self.collection.get(
+            where={"qualified_name": {"$in": qualified_names}},
+            include=["embeddings", "documents", "metadatas"],
+        )
+
+        metadatas = results.get("metadatas") or []
+        embeddings = results.get("embeddings")
+
+        if embeddings is None:
+            return []
+
+        items: list[tuple[Chunk, list[float]]] = []
+
+        for metadata, embedding in zip(metadatas, embeddings):
+            if metadata is None:
+                continue
+
+            chunk = Chunk.model_validate(metadata)
+            vector = (
+                embedding.tolist()
+                if hasattr(embedding, "tolist")
+                else list(embedding)
+            )
+            items.append((chunk, vector))
+
+        return items
+
+    def get_module_headers_for_files(
+        self, file_paths: list[str]
+    ) -> list[tuple[Chunk, list[float]]]:
+        """Fetch module-header chunks and embeddings for the given files."""
+        if not file_paths:
+            return []
+
+        results = self.collection.get(
+            where={
+                "$and": [
+                    {"node_type": "module_header"},
+                    {"file_path": {"$in": file_paths}},
+                ]
+            },
+            include=["embeddings", "metadatas"],
+        )
+
+        metadatas = results.get("metadatas") or []
+        embeddings = results.get("embeddings")
+
+        if embeddings is None:
+            return []
+
+        items: list[tuple[Chunk, list[float]]] = []
+
+        for metadata, embedding in zip(metadatas, embeddings):
+            if metadata is None:
+                continue
+
+            chunk = Chunk.model_validate(metadata)
+            vector = (
+                embedding.tolist()
+                if hasattr(embedding, "tolist")
+                else list(embedding)
+            )
+            items.append((chunk, vector))
+
+        return items
