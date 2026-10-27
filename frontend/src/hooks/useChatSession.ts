@@ -31,9 +31,13 @@ export function useChatSession(
     showRetrievalByDefault ? "retrieval" : "code",
   );
   const [showEvidence, setShowEvidence] = useState(true);
+  const [elapsedQuerySeconds, setElapsedQuerySeconds] = useState(0);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const queryTimerRef = useRef<number | null>(null);
+  const prevCountRef = useRef(0);
 
   const activeId = activeRepo?.id || "";
   const messages = chats[activeId] || [];
@@ -47,9 +51,14 @@ export function useChatSession(
     localStorage.setItem("codebase-chats-v1", JSON.stringify(chats));
   }, [chats]);
 
+  // Keep scroll position when an older answer is selected:
+  // Only scroll when message count increases or querying starts
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, querying]);
+    if (messages.length > prevCountRef.current || querying) {
+      endRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevCountRef.current = messages.length;
+  }, [messages.length, querying]);
 
   function openCitation(c: Citation, answerId?: string) {
     setCitation(c);
@@ -66,6 +75,12 @@ export function useChatSession(
     setChats({});
     setCitation(null);
     setSelectedAnswerId("");
+  }
+
+  function cancelQuery() {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
   }
 
   async function send(textOverride?: string, modeOverride?: Mode) {
@@ -88,9 +103,18 @@ export function useChatSession(
     if (!textOverride) setQuestion("");
     setQuerying(true);
     setPendingRepo(targetRepoId);
+    setElapsedQuerySeconds(0);
+
+    if (queryTimerRef.current) clearInterval(queryTimerRef.current);
+    queryTimerRef.current = window.setInterval(() => {
+      setElapsedQuerySeconds((s) => s + 1);
+    }, 1000);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
-      const answer = await api.query(targetRepoId, q, m);
+      const answer = await api.query(targetRepoId, q, m, abortController.signal);
       const assistantMsg: Message = {
         id: `a-${Date.now()}`,
         role: "assistant",
@@ -105,15 +129,74 @@ export function useChatSession(
       if (answer.citations[0]) setCitation(answer.citations[0]);
       setTab(showRetrievalByDefault ? "retrieval" : "code");
     } catch (e) {
+      const isCancelled =
+        abortController.signal.aborted ||
+        (e instanceof Error &&
+          (e.name === "AbortError" || e.message.includes("cancelled")));
+
+      if (isCancelled) {
+        // Restore question to input box and clean up pending user message
+        setQuestion(q);
+        setChats((c) => ({
+          ...c,
+          [targetRepoId]: (c[targetRepoId] || []).filter((msg) => msg.id !== userMsg.id),
+        }));
+        setToast("Query cancelled. Question restored to input.");
+        setTimeout(() => inputRef.current?.focus(), 50);
+        return;
+      }
+
+      const status = e instanceof ApiError ? e.status : 0;
       const is501 =
-        (e instanceof ApiError && e.status === 501) ||
-        (typeof e === "object" &&
-          e !== null &&
-          "status" in e &&
-          (e as { status: number }).status === 501) ||
+        status === 501 ||
         (e instanceof Error && e.message.includes("501"));
 
-      if (is501) {
+      if (status === 404) {
+        const errorMsg: Message = {
+          id: `e-${Date.now()}`,
+          role: "assistant",
+          text: "",
+          status: 404,
+          error: "Repository not found on the backend.",
+          errorDetail: "The repository was removed or re-created. Please refresh the repository list.",
+          retryQuestion: q,
+          retryMode: m,
+        };
+        setChats((c) => ({
+          ...c,
+          [targetRepoId]: [...(c[targetRepoId] || []), errorMsg],
+        }));
+      } else if (status === 409) {
+        const errorMsg: Message = {
+          id: `e-${Date.now()}`,
+          role: "assistant",
+          text: "",
+          status: 409,
+          error: "The repository is still being indexed.",
+          errorDetail: activeRepo?.stage ? `Current stage: ${activeRepo.stage}` : "Please wait for indexing to complete before asking questions.",
+          retryQuestion: q,
+          retryMode: m,
+        };
+        setChats((c) => ({
+          ...c,
+          [targetRepoId]: [...(c[targetRepoId] || []), errorMsg],
+        }));
+      } else if (status === 422) {
+        const errorMsg: Message = {
+          id: `e-${Date.now()}`,
+          role: "assistant",
+          text: "",
+          status: 422,
+          error: "Invalid query payload.",
+          errorDetail: e instanceof Error ? e.message : "The backend rejected this query request.",
+          retryQuestion: q,
+          retryMode: m,
+        };
+        setChats((c) => ({
+          ...c,
+          [targetRepoId]: [...(c[targetRepoId] || []), errorMsg],
+        }));
+      } else if (is501) {
         const fallbackMode: Mode = m === "hybrid" ? "semantic" : "hybrid";
         const modeLabel = m.charAt(0).toUpperCase() + m.slice(1);
         const fallbackLabel =
@@ -124,7 +207,9 @@ export function useChatSession(
           id: `e-${Date.now()}`,
           role: "assistant",
           text: "",
+          status: 501,
           error: `${modeLabel} mode isn't available on the backend yet. Switched to ${fallbackLabel}.`,
+          errorDetail: "You can send the question using the available mode.",
           retryQuestion: q,
           retryMode: fallbackMode,
         };
@@ -137,10 +222,12 @@ export function useChatSession(
           id: `e-${Date.now()}`,
           role: "assistant",
           text: "",
+          status: status || 0,
           error:
             e instanceof Error
               ? e.message
-              : "An unexpected error occurred while querying.",
+              : "Unable to reach the backend. Check your network connection.",
+          errorDetail: "Preserved your typed question and mode. Click retry below.",
           retryQuestion: q,
           retryMode: m,
         };
@@ -150,8 +237,14 @@ export function useChatSession(
         }));
       }
     } finally {
+      if (queryTimerRef.current) {
+        clearInterval(queryTimerRef.current);
+        queryTimerRef.current = null;
+      }
+      setElapsedQuerySeconds(0);
       setQuerying(false);
       setPendingRepo("");
+      abortControllerRef.current = null;
     }
   }
 
@@ -213,6 +306,8 @@ export function useChatSession(
     setMode,
     querying,
     busy,
+    elapsedQuerySeconds,
+    cancelQuery,
     citation,
     tab,
     setTab,

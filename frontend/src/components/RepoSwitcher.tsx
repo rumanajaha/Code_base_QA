@@ -1,15 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  Folder,
-  GitBranch,
-  Plus,
-  RotateCw,
-  Search,
-  X,
-} from "lucide-react";
+import { useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import type { Repository } from "../types";
+import RepoSwitcherMenu from "./RepoSwitcherMenu";
 
 interface RepoSwitcherProps {
   repos: Repository[];
@@ -35,9 +27,6 @@ export default function RepoSwitcher({
   const [switcherIndex, setSwitcherIndex] = useState(0);
 
   const switcherTriggerRef = useRef<HTMLButtonElement>(null);
-  const switcherMenuRef = useRef<HTMLDivElement>(null);
-  const switcherSearchRef = useRef<HTMLInputElement>(null);
-  const switcherListRef = useRef<HTMLDivElement>(null);
 
   const activeRepo = repos.find((r) => r.id === activeId);
 
@@ -64,94 +53,6 @@ export default function RepoSwitcher({
       openSwitcher();
     }
   };
-
-  const handleMenuKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      setSwitcherOpen(false);
-      switcherTriggerRef.current?.focus();
-      return;
-    }
-    if (e.key === "Tab") {
-      setSwitcherOpen(false);
-      return;
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      if (filteredSwitcherRepos.length > 0) {
-        setSwitcherIndex((prev) =>
-          prev + 1 < filteredSwitcherRepos.length ? prev + 1 : 0,
-        );
-      }
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      if (filteredSwitcherRepos.length > 0) {
-        setSwitcherIndex((prev) =>
-          prev - 1 >= 0 ? prev - 1 : filteredSwitcherRepos.length - 1,
-        );
-      }
-      return;
-    }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      if (filteredSwitcherRepos[switcherIndex]) {
-        selectRepo(filteredSwitcherRepos[switcherIndex].id);
-      }
-      return;
-    }
-  };
-
-  // Focus search input when switcher menu opens
-  useEffect(() => {
-    if (switcherOpen) {
-      requestAnimationFrame(() => {
-        switcherSearchRef.current?.focus();
-      });
-    }
-  }, [switcherOpen]);
-
-  // Keep highlighted item visible when navigating with Arrow Up/Down
-  useEffect(() => {
-    if (!switcherOpen) return;
-    const highlightedEl = switcherListRef.current?.querySelector<HTMLElement>(
-      `.repo-switcher-item[data-index="${switcherIndex}"]`,
-    );
-    highlightedEl?.scrollIntoView({ block: "nearest" });
-  }, [switcherIndex, switcherOpen]);
-
-  // Ensure menu never overflows viewport on the right
-  useEffect(() => {
-    if (!switcherOpen || !switcherMenuRef.current) return;
-    const menu = switcherMenuRef.current;
-    const rect = menu.getBoundingClientRect();
-    if (rect.right > window.innerWidth - 12) {
-      const overflow = rect.right - (window.innerWidth - 12);
-      menu.style.left = `-${overflow}px`;
-    } else {
-      menu.style.left = "0px";
-    }
-  }, [switcherOpen, switcherFilter]);
-
-  // Outside click listener
-  useEffect(() => {
-    if (!switcherOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        switcherMenuRef.current &&
-        !switcherMenuRef.current.contains(e.target as Node) &&
-        switcherTriggerRef.current &&
-        !switcherTriggerRef.current.contains(e.target as Node)
-      ) {
-        setSwitcherOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [switcherOpen]);
 
   return (
     <div className="repo-switcher">
@@ -182,150 +83,26 @@ export default function RepoSwitcher({
       </button>
 
       {switcherOpen && (
-        <div
-          ref={switcherMenuRef}
-          className="repo-switcher-menu"
-          role="dialog"
-          aria-label="Repository switcher"
-          onKeyDown={handleMenuKeyDown}
-        >
-          <div className="repo-switcher-search">
-            <Search size={13} />
-            <input
-              ref={switcherSearchRef}
-              type="text"
-              placeholder="Search repositories…"
-              value={switcherFilter}
-              onChange={(e) => {
-                setSwitcherFilter(e.target.value);
-                setSwitcherIndex(0);
-              }}
-              aria-label="Search repositories"
-            />
-            {switcherFilter && (
-              <button
-                type="button"
-                className="ghost-button icon-button"
-                style={{ padding: "2px", width: "16px", height: "16px" }}
-                onClick={() => {
-                  setSwitcherFilter("");
-                  switcherSearchRef.current?.focus();
-                }}
-                aria-label="Clear search"
-              >
-                <X size={11} />
-              </button>
-            )}
-          </div>
-
-          <div
-            ref={switcherListRef}
-            className="repo-switcher-list"
-            role="listbox"
-            aria-label="Repositories"
-          >
-            {filteredSwitcherRepos.length > 0 ? (
-              filteredSwitcherRepos.map((r, i) => {
-                const isActive = r.id === activeId;
-                const isHighlighted = i === switcherIndex;
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    data-index={i}
-                    className={`repo-switcher-item ${isActive ? "active" : ""} ${isHighlighted ? "highlighted" : ""}`}
-                    onClick={() => selectRepo(r.id)}
-                    onMouseEnter={() => setSwitcherIndex(i)}
-                    role="option"
-                    aria-selected={isActive}
-                  >
-                    <div className="repo-switcher-item-main">
-                      <span className={`repo-switcher-dot ${r.status}`} />
-                      <div className="repo-switcher-item-info">
-                        <span className="repo-switcher-item-name">{r.name}</span>
-                        <span className="repo-switcher-item-branch">
-                          <GitBranch size={10} />
-                          {r.branch}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="repo-switcher-item-meta">
-                      <span className={`state-pill ${r.status}`}>
-                        <span />
-                        {r.status === "ready"
-                          ? "Ready"
-                          : r.status === "ingesting"
-                            ? "Indexing"
-                            : r.status.charAt(0).toUpperCase() +
-                              r.status.slice(1)}
-                      </span>
-                      {isActive && (
-                        <span className="repo-switcher-check">
-                          <Check size={13} />
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })
-            ) : (
-              <div className="repo-switcher-empty">
-                <Folder size={18} />
-                <span>
-                  {repos.length === 0
-                    ? "No repositories yet"
-                    : `No repositories matching "${switcherFilter}"`}
-                </span>
-                {repos.length === 0 && (
-                  <button
-                    type="button"
-                    className="repo-switcher-empty-btn"
-                    onClick={() => {
-                      setSwitcherOpen(false);
-                      onConnect();
-                    }}
-                  >
-                    <Plus size={12} />
-                    Connect repository
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="repo-switcher-footer">
-            <button
-              type="button"
-              className="repo-switcher-action-btn"
-              onClick={() => {
-                setSwitcherOpen(false);
-                onConnect();
-              }}
-            >
-              <Plus size={13} />
-              <span>Connect repository</span>
-            </button>
-            <button
-              type="button"
-              className="repo-switcher-action-btn"
-              onClick={() => {
-                setSwitcherOpen(false);
-                onReindex();
-              }}
-              disabled={!canReindex}
-              title={
-                !activeRepo
-                  ? "No repository selected"
-                  : !canReindex
-                    ? "Re-indexing is only available when ready or failed"
-                    : "Re-index current repository"
-              }
-            >
-              <RotateCw size={12} className={reindexing ? "spin" : ""} />
-              <span>Re-index current repository</span>
-            </button>
-          </div>
-        </div>
+        <RepoSwitcherMenu
+          repos={repos}
+          filteredRepos={filteredSwitcherRepos}
+          activeId={activeId}
+          switcherFilter={switcherFilter}
+          onFilterChange={(val) => {
+            setSwitcherFilter(val);
+            setSwitcherIndex(0);
+          }}
+          switcherIndex={switcherIndex}
+          onIndexChange={setSwitcherIndex}
+          onSelectRepo={selectRepo}
+          onClose={() => setSwitcherOpen(false)}
+          onConnect={onConnect}
+          onReindex={onReindex}
+          canReindex={canReindex}
+          reindexing={reindexing}
+          activeRepo={activeRepo}
+          triggerRef={switcherTriggerRef}
+        />
       )}
     </div>
   );

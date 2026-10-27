@@ -179,6 +179,9 @@ export default function App() {
           endRef={chat.endRef}
           isDemo={isDemo}
           userInitial={userInitial}
+          elapsedQuerySeconds={chat.elapsedQuerySeconds}
+          onCancelQuery={chat.cancelQuery}
+          onReloadRepos={reloadRepos}
         />
 
         <EvidencePanel

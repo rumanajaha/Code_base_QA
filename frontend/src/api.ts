@@ -374,8 +374,19 @@ export const api = {
       };
     }
     if (signal?.aborted) throw new ApiError("The request was cancelled.", 0);
-    await pause(1400);
-    if (signal?.aborted) throw new ApiError("The request was cancelled.", 0);
+    await new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(resolve, 1400);
+      if (signal) {
+        signal.addEventListener(
+          "abort",
+          () => {
+            window.clearTimeout(timer);
+            reject(new ApiError("The request was cancelled.", 0));
+          },
+          { once: true },
+        );
+      }
+    });
     return demoAnswer(question, mode);
   },
 

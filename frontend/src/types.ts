@@ -67,6 +67,8 @@ export interface Message {
   text: string;
   answer?: Answer;
   error?: string;
+  status?: number;
+  errorDetail?: string;
   retryQuestion?: string;
   retryMode?: Mode;
 }

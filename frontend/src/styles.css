@@ -4560,3 +4560,306 @@ body {
   gap: 8px;
   margin-top: 10px;
 }
+
+/* --- Thinking Bubble with Elapsed Time & Cancel --- */
+.thinking-bubble {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 18px 0 15px;
+}
+
+.thinking-bubble-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cancel-query-btn {
+  margin-left: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cancel-query-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.thinking-rate-limit-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #b28d66;
+  background: #fffaf4;
+  border: 1px solid #f1dfcc;
+  border-radius: 6px;
+  padding: 7px 11px;
+  animation: fadeIn 0.25s ease-out;
+  max-width: 520px;
+}
+
+[data-theme="dark"] .thinking-rate-limit-warning {
+  background: rgba(217, 119, 6, 0.1);
+  border-color: rgba(217, 119, 6, 0.25);
+  color: #f59e0b;
+}
+
+/* --- Collapsible Sources Used in AnswerCard --- */
+.sources-used-section {
+  margin: 12px 0 6px;
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+}
+
+.sources-used-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 3px 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.sources-used-toggle:hover {
+  color: var(--text);
+}
+
+.sources-chevron {
+  transition: transform 0.2s ease;
+}
+
+.sources-chevron.open {
+  transform: rotate(180deg);
+}
+
+.sources-used-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  animation: fadeIn 0.15s ease;
+}
+
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.source-chip:hover {
+  background: var(--hover, var(--border));
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.source-type-badge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+  font-family: var(--font-sans, inherit);
+}
+
+.source-type-badge.semantic {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+}
+
+.source-type-badge.graph {
+  background: rgba(168, 85, 247, 0.12);
+  color: #a855f7;
+}
+
+[data-theme="dark"] .source-type-badge.semantic {
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .source-type-badge.graph {
+  background: rgba(192, 132, 252, 0.15);
+  color: #c084fc;
+}
+
+.source-chip-loc {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Answer Action Buttons & Ask in Another Mode --- */
+.answer-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.ask-again-wrap {
+  position: relative;
+}
+
+.ask-again-trigger {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.ask-again-trigger:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.ask-again-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ask-again-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  width: 230px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+  padding: 6px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+[data-theme="dark"] .ask-again-menu {
+  background: #181c24;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.ask-again-header {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  padding: 4px 8px;
+}
+
+.ask-again-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  transition: background 0.15s ease;
+}
+
+.ask-again-item:hover {
+  background: var(--hover, rgba(0, 0, 0, 0.05));
+}
+
+[data-theme="dark"] .ask-again-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ask-again-item strong {
+  font-size: 11px;
+}
+
+.ask-again-item small {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+/* --- Query Error Details and Actions --- */
+.query-error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.query-error-detail {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--font-mono, monospace);
+  background: rgba(0, 0, 0, 0.03);
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-top: 2px;
+}
+
+[data-theme="dark"] .query-error-detail {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.query-error-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.query-error-actions .restore-btn {
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.query-error-actions .restore-btn:hover {
+  color: var(--text);
+}
+
+.query-error-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
