@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from app.api.schemas import RepoCreateRequest, RepoCreateResponse
 from app.ingest_service import (
     create_repo,
+    delete_repo,
     get_repo_root_path,
     get_status,
     list_repos,
@@ -38,11 +39,12 @@ def register_repository(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
-    repo_status = create_repo(req.repo_url)
+    repo_status = create_repo(req.repo_url, branch=req.branch)
     background_tasks.add_task(
         run_ingestion_task,
         source=req.repo_url,
         repo_id=repo_status.repo_id,
+        branch=req.branch,
     )
     return RepoCreateResponse(repo_id=repo_status.repo_id)
 
@@ -53,7 +55,29 @@ def register_repository(
     summary="List all registered repositories",
 )
 def get_all_repositories() -> list[RepoStatus]:
-    return list_repos()
+    repos = list_repos()
+    return repos if repos is not None else []
+
+
+@router.delete(
+    "/repos/{repo_id}",
+    summary="Delete a repository and its indexed data",
+)
+def remove_repository(repo_id: str) -> dict[str, str]:
+    repo_status = get_status(repo_id)
+    if not repo_status:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository '{repo_id}' not found",
+        )
+    if repo_status.state == "ingesting":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Repository '{repo_id}' is currently ingesting",
+        )
+
+    delete_repo(repo_id)
+    return {"deleted": repo_id}
 
 
 @router.get(
