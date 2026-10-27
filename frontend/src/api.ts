@@ -1,6 +1,10 @@
 import type { Answer, CodeFile, Ingestion, Mode, Repository } from "./types";
 import { demoAnswer, demoFiles, demoStats, sampleRepo } from "./demo";
-const base = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+let rawBase = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+if (rawBase && !/^https?:\/\//i.test(rawBase)) {
+  rawBase = "http://" + rawBase;
+}
+const base = rawBase;
 export const isDemo = !base;
 const pause = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -48,6 +52,12 @@ async function request<T>(
           : Array.isArray(detail)
             ? detail.map((d) => d.msg).join("; ")
             : `Request failed (${res.status}). Please try again.`,
+        res.status,
+      );
+    }
+    if (data === null) {
+      throw new ApiError(
+        `Received non-JSON response from ${base + path}. Check that VITE_API_URL points to the backend (port 8000), not the frontend.`,
         res.status,
       );
     }
@@ -101,7 +111,8 @@ export const api = {
     const result = await request<BackendRepo[] | { repos: BackendRepo[] }>(
       "/repos",
     );
-    return (Array.isArray(result) ? result : result.repos).map(normalizeRepo);
+    const list = Array.isArray(result) ? result : (result?.repos ?? []);
+    return list.map(normalizeRepo);
   },
   async connect(url: string, branch: string): Promise<Repository> {
     if (!isDemo) {

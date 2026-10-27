@@ -75,6 +75,9 @@ class RepoStatus(BaseModel):
     unresolved_calls: int = 0
     error: str | None = None
     repo_url: str | None = None
+    branch: str | None = None
+    stage: str | None = None
+    progress: int | None = Field(default=None, ge=0, le=100)
 
 
 class QueryRequest(BaseModel):
