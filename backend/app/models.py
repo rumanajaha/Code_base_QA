@@ -1,6 +1,6 @@
 """Shared data models for Codebase QA RAG assistant."""
 from typing import Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Chunk(BaseModel):
@@ -81,5 +81,5 @@ class QueryRequest(BaseModel):
     """Request payload for querying a repository."""
 
     repo_id: str
-    question: str
+    question: str = Field(..., min_length=3, max_length=1000)
     mode: Literal["baseline", "semantic", "hybrid", "adaptive"] = "adaptive"

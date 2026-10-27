@@ -5,6 +5,7 @@ from pathlib import Path
 import threading
 from typing import Callable
 
+from app.config import settings
 from app.indexing.graph_store import (
     clear_repo,
     ensure_schema,
@@ -43,15 +44,30 @@ def create_repo(url: str) -> RepoStatus:
     if url.startswith("https://github.com/"):
         owner, name = parse_repo_url(url)
         repo_id = f"{owner}__{name}"
+        root_path = str((Path(settings.REPOS_DIR) / repo_id).resolve())
     else:
+        root_path = str(Path(url).resolve())
         repo_id = Path(url).stem
 
     status = RepoStatus(repo_id=repo_id, repo_url=url, state="queued")
     with _registry_lock:
         registry = _load_registry()
-        registry[repo_id] = status.model_dump()
+        record = status.model_dump()
+        record["root_path"] = root_path
+        registry[repo_id] = record
         _save_registry(registry)
     return status
+
+
+def get_repo_root_path(repo_id: str) -> Path | None:
+    """Return the absolute root path of a registered repository."""
+    with _registry_lock:
+        registry = _load_registry()
+        record = registry.get(repo_id)
+        if not record:
+            return None
+        root_str = record.get("root_path") or str(Path(settings.REPOS_DIR) / repo_id)
+        return Path(root_str).resolve()
 
 
 def update_status(repo_id: str, **fields) -> RepoStatus | None:
@@ -165,7 +181,11 @@ def run_ingestion_task(
 ) -> None:
     """Background task wrapper handling progress updates and failure states."""
     try:
-        update_status(repo_id, state="ingesting", error=None)
+        if str(source).startswith("https://github.com/"):
+            root_path = str((Path(settings.REPOS_DIR) / repo_id).resolve())
+        else:
+            root_path = str(Path(source).resolve())
+        update_status(repo_id, state="ingesting", error=None, root_path=root_path)
 
         def progress_callback(state: str, **counts):
             valid_state = state if state in {"queued", "ingesting", "ready", "failed"} else "ingesting"
