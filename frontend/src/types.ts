@@ -68,3 +68,9 @@ export interface CodeFile {
   start_line: number;
   end_line: number;
 }
+export interface HealthResult {
+  ok: boolean;
+  latencyMs: number;
+  details?: unknown;
+  error?: string;
+}
