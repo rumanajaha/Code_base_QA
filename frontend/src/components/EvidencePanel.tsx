@@ -12,6 +12,7 @@ interface EvidencePanelProps {
   citation: Citation | null;
   onOpenCitation: (c: Citation) => void;
   selectedAnswer: Answer | null;
+  compactCode?: boolean;
 }
 
 export default function EvidencePanel({
@@ -23,6 +24,7 @@ export default function EvidencePanel({
   citation,
   onOpenCitation,
   selectedAnswer,
+  compactCode = false,
 }: EvidencePanelProps) {
   if (!showEvidence) return null;
 
@@ -88,6 +90,7 @@ export default function EvidencePanel({
               repo={repo}
               citation={citation}
               onOpen={onOpenCitation}
+              compactCode={compactCode}
             />
           ) : (
             <ProvenancePanel

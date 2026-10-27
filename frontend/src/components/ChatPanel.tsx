@@ -99,6 +99,7 @@ interface ChatPanelProps {
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   endRef: React.RefObject<HTMLDivElement | null>;
   isDemo: boolean;
+  userInitial?: string;
 }
 
 export default function ChatPanel({
@@ -131,6 +132,7 @@ export default function ChatPanel({
   inputRef,
   endRef,
   isDemo,
+  userInitial = "U",
 }: ChatPanelProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showMode, setShowMode] = useState(false);
@@ -376,7 +378,7 @@ export default function ChatPanel({
                 {m.role === "user" ? (
                   <div className="user-message">
                     <span>{m.text}</span>
-                    <span className="user-avatar">J</span>
+                    <span className="user-avatar">{userInitial || "U"}</span>
                   </div>
                 ) : m.answer ? (
                   <AnswerCard
@@ -389,7 +391,11 @@ export default function ChatPanel({
                   <div className="query-error" role="alert">
                     <TriangleAlert size={18} />
                     <div>
-                      <strong>We couldn’t get that answer.</strong>
+                      <strong>
+                        {m.error?.includes("isn't available")
+                          ? "Mode not supported"
+                          : "We couldn’t get that answer."}
+                      </strong>
                       <p>{m.error}</p>
                       <button
                         className="text-button"
@@ -397,7 +403,7 @@ export default function ChatPanel({
                         onClick={() => onSend(m.retryQuestion, m.retryMode)}
                       >
                         <RotateCw size={13} />
-                        Try again
+                        {m.error?.includes("isn't available") ? "Retry question" : "Try again"}
                       </button>
                     </div>
                   </div>

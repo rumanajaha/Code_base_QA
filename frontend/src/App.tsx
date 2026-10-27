@@ -4,6 +4,7 @@ import { isDemo } from "./api";
 import { useBackendStatus } from "./hooks/useBackendStatus";
 import { useRepositories } from "./hooks/useRepositories";
 import { useChatSession } from "./hooks/useChatSession";
+import { useSettings } from "./hooks/useSettings";
 import { useFocusTrap } from "./hooks/useFocusTrap";
 import Topbar from "./components/Topbar";
 import Sidebar from "./components/Sidebar";
@@ -11,11 +12,17 @@ import ChatPanel from "./components/ChatPanel";
 import EvidencePanel from "./components/EvidencePanel";
 import HelpModal from "./components/HelpModal";
 import ConnectModal from "./components/ConnectModal";
+import SettingsModal from "./components/SettingsModal";
+import ClearDataModal from "./components/ClearDataModal";
+import StatusModal from "./components/StatusModal";
 
 export default function App() {
-  const [theme, setTheme] = useState(() => localStorage.getItem("codebase-theme") || "light");
+  const { settings, updateSettings, toggleTheme, clearAllLocalData, userInitial } = useSettings();
   const [showConnect, setShowConnect] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showClearData, setShowClearData] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [toast, setToast] = useState("");
 
@@ -48,14 +55,16 @@ export default function App() {
     activeRepo && (activeRepo.status === "ready" || activeRepo.status === "failed") && !reindexing,
   );
 
-  const chat = useChatSession(activeRepo, ready, isBackendBlocked, setToast);
+  const chat = useChatSession(
+    activeRepo,
+    ready,
+    isBackendBlocked,
+    setToast,
+    settings.defaultMode,
+    settings.showRetrievalByDefault,
+  );
 
-  useFocusTrap(showConnect || showHelp);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem("codebase-theme", theme);
-  }, [theme]);
+  useFocusTrap(showConnect || showHelp || showSettings || showClearData || showStatusModal);
 
   useEffect(() => {
     if (!toast) return;
@@ -86,9 +95,14 @@ export default function App() {
         reindexing={reindexing}
         onOpenSidebar={() => setShowSidebar(true)}
         onOpenHelp={() => setShowHelp(true)}
-        theme={theme}
-        onToggleTheme={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+        onOpenSettings={() => setShowSettings(true)}
+        onOpenStatus={() => setShowStatusModal(true)}
+        onOpenClearData={() => setShowClearData(true)}
+        theme={settings.theme}
+        onToggleTheme={toggleTheme}
         isDemo={isDemo}
+        userInitial={userInitial}
+        displayName={settings.displayName}
       />
 
       <div className="workspace-layout">
@@ -145,6 +159,7 @@ export default function App() {
           inputRef={chat.inputRef}
           endRef={chat.endRef}
           isDemo={isDemo}
+          userInitial={userInitial}
         />
 
         <EvidencePanel
@@ -156,6 +171,7 @@ export default function App() {
           citation={chat.citation}
           onOpenCitation={chat.openCitation}
           selectedAnswer={chat.selectedAnswer}
+          compactCode={settings.compactCode}
         />
       </div>
 
@@ -187,6 +203,31 @@ export default function App() {
         isOpen={showHelp}
         onClose={() => setShowHelp(false)}
         isDemo={isDemo}
+      />
+
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        settings={settings}
+        onUpdateSettings={updateSettings}
+        backendStatus={backendStatus}
+      />
+
+      <ClearDataModal
+        isOpen={showClearData}
+        onClose={() => setShowClearData(false)}
+        onConfirm={() => {
+          clearAllLocalData();
+          chat.clearAllChats();
+          setShowClearData(false);
+          setToast("All local data, demo repositories, and preferences have been cleared.");
+        }}
+      />
+
+      <StatusModal
+        isOpen={showStatusModal}
+        onClose={() => setShowStatusModal(false)}
+        status={backendStatus}
       />
 
       {toast && (

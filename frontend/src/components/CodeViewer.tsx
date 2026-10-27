@@ -30,10 +30,12 @@ export default function CodeViewer({
   repo,
   citation,
   onOpen,
+  compactCode = false,
 }: {
   repo?: Repository;
   citation: Citation | null;
   onOpen: (c: Citation) => void;
+  compactCode?: boolean;
 }) {
   const [file, setFile] = useState<CodeFile | null>(null);
   const [loading, setLoading] = useState(false);
@@ -148,7 +150,7 @@ export default function CodeViewer({
       </div>
     );
   return (
-    <div className="code-viewer">
+    <div className={`code-viewer ${compactCode ? "compact-code" : ""}`}>
       <div className="file-header">
         <FileCode2 size={15} />
         <span title={citation.file_path}>{citation.file_path}</span>

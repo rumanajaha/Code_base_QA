@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../api";
+import { ApiError, api } from "../api";
 import type { Citation, Message, Mode, Repository } from "../types";
 
 function readChats(): Record<string, Message[]> {
@@ -17,15 +17,19 @@ export function useChatSession(
   ready: boolean,
   isBackendBlocked: boolean,
   setToast: (msg: string) => void,
+  defaultMode: Mode = "hybrid",
+  showRetrievalByDefault = false,
 ) {
   const [chats, setChats] = useState<Record<string, Message[]>>(readChats);
   const [question, setQuestion] = useState("");
-  const [mode, setMode] = useState<Mode>("adaptive");
+  const [mode, setMode] = useState<Mode>(defaultMode);
   const [querying, setQuerying] = useState(false);
   const [pendingRepo, setPendingRepo] = useState("");
   const [selectedAnswerId, setSelectedAnswerId] = useState("");
   const [citation, setCitation] = useState<Citation | null>(null);
-  const [tab, setTab] = useState<"code" | "retrieval">("code");
+  const [tab, setTab] = useState<"code" | "retrieval">(
+    showRetrievalByDefault ? "retrieval" : "code",
+  );
   const [showEvidence, setShowEvidence] = useState(true);
 
   const endRef = useRef<HTMLDivElement>(null);
@@ -56,6 +60,12 @@ export function useChatSession(
 
   function clearCitation() {
     setCitation(null);
+  }
+
+  function clearAllChats() {
+    setChats({});
+    setCitation(null);
+    setSelectedAnswerId("");
   }
 
   async function send(textOverride?: string, modeOverride?: Mode) {
@@ -93,20 +103,52 @@ export function useChatSession(
       }));
       setSelectedAnswerId(assistantMsg.id);
       if (answer.citations[0]) setCitation(answer.citations[0]);
-      setTab("code");
+      setTab(showRetrievalByDefault ? "retrieval" : "code");
     } catch (e) {
-      const errorMsg: Message = {
-        id: `e-${Date.now()}`,
-        role: "assistant",
-        text: "",
-        error: e instanceof Error ? e.message : "An unexpected error occurred while querying.",
-        retryQuestion: q,
-        retryMode: m,
-      };
-      setChats((c) => ({
-        ...c,
-        [targetRepoId]: [...(c[targetRepoId] || []), errorMsg],
-      }));
+      const is501 =
+        (e instanceof ApiError && e.status === 501) ||
+        (typeof e === "object" &&
+          e !== null &&
+          "status" in e &&
+          (e as { status: number }).status === 501) ||
+        (e instanceof Error && e.message.includes("501"));
+
+      if (is501) {
+        const fallbackMode: Mode = m === "hybrid" ? "semantic" : "hybrid";
+        const modeLabel = m.charAt(0).toUpperCase() + m.slice(1);
+        const fallbackLabel =
+          fallbackMode.charAt(0).toUpperCase() + fallbackMode.slice(1);
+        setMode(fallbackMode);
+
+        const errorMsg: Message = {
+          id: `e-${Date.now()}`,
+          role: "assistant",
+          text: "",
+          error: `${modeLabel} mode isn't available on the backend yet. Switched to ${fallbackLabel}.`,
+          retryQuestion: q,
+          retryMode: fallbackMode,
+        };
+        setChats((c) => ({
+          ...c,
+          [targetRepoId]: [...(c[targetRepoId] || []), errorMsg],
+        }));
+      } else {
+        const errorMsg: Message = {
+          id: `e-${Date.now()}`,
+          role: "assistant",
+          text: "",
+          error:
+            e instanceof Error
+              ? e.message
+              : "An unexpected error occurred while querying.",
+          retryQuestion: q,
+          retryMode: m,
+        };
+        setChats((c) => ({
+          ...c,
+          [targetRepoId]: [...(c[targetRepoId] || []), errorMsg],
+        }));
+      }
     } finally {
       setQuerying(false);
       setPendingRepo("");
@@ -121,17 +163,22 @@ export function useChatSession(
     setChats((c) => ({ ...c, [activeId]: [] }));
     setCitation(null);
     setSelectedAnswerId("");
-    setTab("code");
+    setTab(showRetrievalByDefault ? "retrieval" : "code");
     setToast("Started a fresh conversation.");
   }
 
   function exportChat() {
     const text = messages
-      .map((m) => `${m.role === "user" ? "You" : "Codebase"}\n${m.text || m.error}\n`)
+      .map(
+        (m) => `${m.role === "user" ? "You" : "Codebase"}\n${m.text || m.error}\n`,
+      )
       .join("\n");
-    const blob = new Blob([`# ${activeRepo?.name || "Codebase"} conversation\n\n${text}`], {
-      type: "text/markdown",
-    });
+    const blob = new Blob(
+      [`# ${activeRepo?.name || "Codebase"} conversation\n\n${text}`],
+      {
+        type: "text/markdown",
+      },
+    );
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -162,6 +209,7 @@ export function useChatSession(
     inputRef,
     openCitation,
     clearCitation,
+    clearAllChats,
     send,
     newChat,
     exportChat,

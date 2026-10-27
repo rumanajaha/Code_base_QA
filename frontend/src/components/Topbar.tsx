@@ -1,4 +1,13 @@
-import { CircleHelp, Menu, Moon, Sun } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  Activity,
+  CircleHelp,
+  Menu,
+  Moon,
+  Settings as SettingsIcon,
+  Sun,
+  Trash2,
+} from "lucide-react";
 import type { Repository } from "../types";
 import Brand from "./Brand";
 import RepoSwitcher from "./RepoSwitcher";
@@ -13,9 +22,14 @@ interface TopbarProps {
   reindexing: boolean;
   onOpenSidebar: () => void;
   onOpenHelp: () => void;
+  onOpenSettings: () => void;
+  onOpenStatus: () => void;
+  onOpenClearData: () => void;
   theme: string;
   onToggleTheme: () => void;
   isDemo: boolean;
+  userInitial: string;
+  displayName: string;
 }
 
 export default function Topbar({
@@ -28,10 +42,43 @@ export default function Topbar({
   reindexing,
   onOpenSidebar,
   onOpenHelp,
+  onOpenSettings,
+  onOpenStatus,
+  onOpenClearData,
   theme,
   onToggleTheme,
   isDemo,
+  userInitial,
+  displayName,
 }: TopbarProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuContainerRef = useRef<HTMLDivElement>(null);
+  const avatarBtnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        avatarBtnRef.current?.focus();
+      }
+    };
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        menuContainerRef.current &&
+        !menuContainerRef.current.contains(e.target as Node)
+      ) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [menuOpen]);
+
   return (
     <header className="topbar">
       <div className="topbar-brand">
@@ -83,12 +130,87 @@ export default function Topbar({
             <span />
           </span>
         </button>
-        <span
-          className="avatar"
-          title="Local session · no sign-in required"
-        >
-          J
-        </span>
+
+        <div className="avatar-menu-container" ref={menuContainerRef}>
+          <button
+            ref={avatarBtnRef}
+            type="button"
+            className="avatar avatar-btn"
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-label={`Account menu for ${displayName || "You"}`}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+          >
+            {userInitial}
+          </button>
+
+          {menuOpen && (
+            <div
+              className="avatar-dropdown-menu"
+              role="menu"
+              aria-label="Account options"
+            >
+              <div className="avatar-menu-header">
+                <strong>{displayName || "You"}</strong>
+                <span>Local session</span>
+              </div>
+              <div className="avatar-menu-divider" />
+              <button
+                type="button"
+                className="avatar-menu-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenSettings();
+                }}
+                role="menuitem"
+              >
+                <SettingsIcon size={14} />
+                <span>Settings…</span>
+              </button>
+              <button
+                type="button"
+                className="avatar-menu-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenStatus();
+                }}
+                role="menuitem"
+              >
+                <Activity size={14} />
+                <span>Backend status</span>
+              </button>
+              <button
+                type="button"
+                className="avatar-menu-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenHelp();
+                }}
+                role="menuitem"
+              >
+                <CircleHelp size={14} />
+                <span>Quick guide</span>
+              </button>
+              <div className="avatar-menu-divider" />
+              <button
+                type="button"
+                className="avatar-menu-item danger"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenClearData();
+                }}
+                role="menuitem"
+              >
+                <Trash2 size={14} />
+                <span>Clear local data…</span>
+              </button>
+              <div className="avatar-menu-divider" />
+              <div className="avatar-menu-version">
+                Codebase Q&A Assistant · frontend v1.0
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
