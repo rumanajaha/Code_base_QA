@@ -4328,3 +4328,235 @@ body {
   min-width: 36px;
   font-size: 10.5px;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Part 5: Repository Handling Improvements                                   */
+/* -------------------------------------------------------------------------- */
+
+.repo-card-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.repo-card-wrapper .repo-menu-trigger {
+  opacity: 0;
+  margin-left: auto;
+  transition: opacity 0.15s ease;
+  width: 22px;
+  height: 22px;
+  padding: 2px;
+}
+
+.repo-card-wrapper:hover .repo-menu-trigger,
+.repo-card-wrapper:focus-within .repo-menu-trigger {
+  opacity: 1;
+}
+
+.repo-compact-stats {
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px dashed var(--border);
+  font-family: var(--font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-card-menu {
+  position: absolute;
+  right: 12px;
+  top: 36px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  z-index: 60;
+  min-width: 110px;
+  animation: appear 0.12s ease;
+}
+
+.repo-card-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.repo-card-menu-item.danger {
+  color: #dc2626;
+}
+
+.repo-card-menu-item.danger:hover {
+  background: #fee2e2;
+}
+
+[data-theme="dark"] .repo-card-menu-item.danger {
+  color: #f87171;
+}
+
+[data-theme="dark"] .repo-card-menu-item.danger:hover {
+  background: rgba(220, 38, 38, 0.2);
+}
+
+.chat-header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chat-repo-github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s;
+  background: var(--hover);
+}
+
+.chat-repo-github-link:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.unresolved-calls-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: help;
+  user-select: none;
+}
+
+[data-theme="dark"] .unresolved-calls-badge {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.conversation-unresolved-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  background: var(--hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 6px 0 14px;
+}
+
+.unresolved-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ingestion-stage-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.ingestion-elapsed {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--font-mono, monospace);
+  font-weight: 400;
+}
+
+.progress-track.determinate > span {
+  transition: width 0.3s ease;
+}
+
+.polling-paused-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 10px;
+}
+
+[data-theme="dark"] .polling-paused-banner {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.failed-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+[data-theme="dark"] .failed-header {
+  color: #f87171;
+}
+
+.failed-details summary {
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.failed-show-more {
+  color: var(--accent);
+  text-decoration: underline;
+  margin-left: 4px;
+}
+
+.failed-error-full {
+  font-size: 11px;
+  color: var(--text);
+  background: var(--hover);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  line-height: 1.45;
+  margin: 6px 0 8px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.failed-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}

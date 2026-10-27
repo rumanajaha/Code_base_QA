@@ -7,6 +7,14 @@ export interface Repository {
   branch: string;
   status: RepoState;
   demo?: boolean;
+  files?: number;
+  chunks?: number;
+  graph_nodes?: number;
+  graph_edges?: number;
+  unresolved_calls?: number;
+  stage?: string;
+  progress?: number;
+  error?: string;
 }
 export interface Ingestion {
   status: RepoState;

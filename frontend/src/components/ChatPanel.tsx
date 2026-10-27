@@ -1,29 +1,6 @@
 import { useState } from "react";
 import {
-  ArrowDown,
-  ArrowDownToLine,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
-  ArrowUpRight,
-  Check,
-  ChevronDown,
-  Code2,
-  FileCode2,
-  GitBranch,
-  Github,
-  Loader2,
-  MessageSquare,
-  MoreHorizontal,
-  PanelRightClose,
-  PanelRightOpen,
-  Plus,
-  RotateCw,
-  ShieldCheck,
-  Sparkles,
-  Trash2,
-  TriangleAlert,
-  Workflow,
+  ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Check, ChevronDown, CircleHelp, Code2, FileCode2, GitBranch, Github, Loader2, MessageSquare, MoreHorizontal, PanelRightClose, PanelRightOpen, Plus, RotateCw, ShieldCheck, Sparkles, Trash2, TriangleAlert, Workflow,
 } from "lucide-react";
 import type { Citation, Ingestion, Message, Mode, Repository } from "../types";
 import type { BackendStatus } from "../hooks/useBackendStatus";
@@ -102,37 +79,7 @@ interface ChatPanelProps {
   userInitial?: string;
 }
 
-export default function ChatPanel({
-  repo,
-  currentStats,
-  messages,
-  selectedAnswerId,
-  onOpenCitation,
-  onInspectAnswer,
-  showEvidence,
-  onToggleEvidence,
-  onNewChat,
-  onExportChat,
-  onReindex,
-  onResetDemo,
-  onConnect,
-  querying,
-  busy,
-  ready,
-  ingesting,
-  reindexing,
-  question,
-  onQuestionChange,
-  onSend,
-  mode,
-  onModeChange,
-  backendStatus,
-  isBackendBlocked,
-  backendBlockedReason,
-  inputRef,
-  endRef,
-  isDemo,
-  userInitial = "U",
+export default function ChatPanel({ repo, currentStats, messages, selectedAnswerId, onOpenCitation, onInspectAnswer, showEvidence, onToggleEvidence, onNewChat, onExportChat, onReindex, onResetDemo, onConnect, querying, busy, ready, ingesting, reindexing, question, onQuestionChange, onSend, mode, onModeChange, backendStatus, isBackendBlocked, backendBlockedReason, inputRef, endRef, isDemo, userInitial = "U",
 }: ChatPanelProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showMode, setShowMode] = useState(false);
@@ -171,7 +118,23 @@ export default function ChatPanel({
             <MessageSquare size={17} />
           </span>
           <div>
-            <h1>{repo?.name || "A new perspective on your code"}</h1>
+            <div className="chat-header-title-row">
+              <h1>{repo?.name || "A new perspective on your code"}</h1>
+              {repo?.url && (
+                <a
+                  href={repo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="chat-repo-github-link"
+                  title={`Open ${repo.name} on GitHub`}
+                  aria-label={`Open ${repo.name} on GitHub in a new tab`}
+                >
+                  <Github size={12} />
+                  <span>GitHub</span>
+                  <ArrowUpRight size={11} />
+                </a>
+              )}
+            </div>
             <span>
               {repo ? (
                 <>
@@ -181,6 +144,18 @@ export default function ChatPanel({
                   {repo.demo
                     ? "Sample Python repository"
                     : "Python repository"}
+                  {currentStats && currentStats.unresolved_calls > 0 && (
+                    <>
+                      <span className="header-dot">·</span>
+                      <span
+                        className="unresolved-calls-badge"
+                        title="Calls the parser could not resolve statically (dynamic Python). The graph only contains resolved calls."
+                      >
+                        <CircleHelp size={11} />
+                        {currentStats.unresolved_calls} unresolved calls
+                      </span>
+                    </>
+                  )}
                 </>
               ) : (
                 "Your repository, in conversation"
@@ -373,6 +348,20 @@ export default function ChatPanel({
               THE CONVERSATION STARTS HERE
               <span />
             </div>
+            {currentStats && currentStats.unresolved_calls > 0 && (
+              <div className="conversation-unresolved-banner">
+                <span
+                  className="unresolved-calls-badge"
+                  title="Calls the parser could not resolve statically (dynamic Python). The graph only contains resolved calls."
+                >
+                  <CircleHelp size={12} />
+                  {currentStats.unresolved_calls} unresolved calls
+                </span>
+                <span className="unresolved-hint">
+                  Calls the parser could not resolve statically (dynamic Python). The graph only contains resolved calls.
+                </span>
+              </div>
+            )}
             {messages.map((m) => (
               <div key={m.id} className={`message ${m.role}`}>
                 {m.role === "user" ? (

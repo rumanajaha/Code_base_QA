@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import { isDemo } from "./api";
+import type { Repository } from "./types";
 import { useBackendStatus } from "./hooks/useBackendStatus";
 import { useRepositories } from "./hooks/useRepositories";
 import { useChatSession } from "./hooks/useChatSession";
@@ -15,6 +16,7 @@ import ConnectModal from "./components/ConnectModal";
 import SettingsModal from "./components/SettingsModal";
 import ClearDataModal from "./components/ClearDataModal";
 import StatusModal from "./components/StatusModal";
+import RemoveRepoModal from "./components/RemoveRepoModal";
 
 export default function App() {
   const { settings, updateSettings, toggleTheme, clearAllLocalData, userInitial } = useSettings();
@@ -24,6 +26,8 @@ export default function App() {
   const [showClearData, setShowClearData] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [repoToRemove, setRepoToRemove] = useState<Repository | null>(null);
+  const [removingRepo, setRemovingRepo] = useState(false);
   const [toast, setToast] = useState("");
 
   const backendStatus = useBackendStatus();
@@ -48,6 +52,10 @@ export default function App() {
     triggerReindex,
     handleConnected,
     handleResetDemo,
+    removeRepository,
+    pollingPaused,
+    retryPolling,
+    getElapsedSeconds,
   } = useRepositories(backendStatus.state);
 
   const ready = activeRepo?.status === "ready";
@@ -64,7 +72,14 @@ export default function App() {
     settings.showRetrievalByDefault,
   );
 
-  useFocusTrap(showConnect || showHelp || showSettings || showClearData || showStatusModal);
+  useFocusTrap(
+    showConnect ||
+      showHelp ||
+      showSettings ||
+      showClearData ||
+      showStatusModal ||
+      Boolean(repoToRemove),
+  );
 
   useEffect(() => {
     if (!toast) return;
@@ -120,6 +135,10 @@ export default function App() {
           reindexing={reindexing}
           onReindex={reindex}
           backendStatus={backendStatus}
+          pollingPaused={pollingPaused}
+          onRetryPolling={retryPolling}
+          getElapsedSeconds={getElapsedSeconds}
+          onRequestRemove={(r) => setRepoToRemove(r)}
         />
 
         <ChatPanel
@@ -185,25 +204,25 @@ export default function App() {
       <ConnectModal
         isOpen={showConnect}
         onClose={() => setShowConnect(false)}
-        onConnected={(r) => {
-          handleConnected(r.id);
+        existingRepos={repos}
+        onConnected={(r, wasExisting) => {
+          setActiveId(r.id);
           setShowConnect(false);
           setShowSidebar(false);
           setToast(
-            isDemo
-              ? "Sample indexing started. Demo code will be used."
-              : "Repository connected. Indexing has started.",
+            wasExisting
+              ? `Selected existing repository "${r.name}".`
+              : isDemo
+                ? "Sample indexing started. Demo code will be used."
+                : "Repository connected. Indexing has started.",
           );
+          if (!wasExisting) handleConnected(r.id);
         }}
         disabled={isBackendBlocked}
         disabledReason={backendBlockedReason}
       />
 
-      <HelpModal
-        isOpen={showHelp}
-        onClose={() => setShowHelp(false)}
-        isDemo={isDemo}
-      />
+      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} isDemo={isDemo} />
 
       <SettingsModal
         isOpen={showSettings}
@@ -228,6 +247,30 @@ export default function App() {
         isOpen={showStatusModal}
         onClose={() => setShowStatusModal(false)}
         status={backendStatus}
+      />
+
+      <RemoveRepoModal
+        isOpen={Boolean(repoToRemove)}
+        onClose={() => setRepoToRemove(null)}
+        repo={repoToRemove}
+        loading={removingRepo}
+        onConfirm={async () => {
+          if (!repoToRemove) return;
+          setRemovingRepo(true);
+          try {
+            const { hiddenLocally } = await removeRepository(repoToRemove.id, chat.deleteRepoChat);
+            setRepoToRemove(null);
+            setToast(
+              hiddenLocally
+                ? "Remove isn't supported by this backend; it was hidden locally instead"
+                : `Repository "${repoToRemove.name}" removed.`,
+            );
+          } catch (e) {
+            setToast(e instanceof Error ? e.message : "Failed to remove repository.");
+          } finally {
+            setRemovingRepo(false);
+          }
+        }}
       />
 
       {toast && (

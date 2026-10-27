@@ -14,11 +14,13 @@ export default function RepoConnectForm({
   onClose,
   disabled = false,
   disabledReason,
+  existingRepos = [],
 }: {
-  onConnected: (r: Repository) => void;
+  onConnected: (r: Repository, wasExisting?: boolean) => void;
   onClose?: () => void;
   disabled?: boolean;
   disabledReason?: string;
+  existingRepos?: Repository[];
 }) {
   const [url, setUrl] = useState("");
   const [branch, setBranch] = useState("");
@@ -42,13 +44,22 @@ export default function RepoConnectForm({
       return;
     }
     setError("");
+
+    const targetUrl = `https://github.com${parsed.pathname.replace(/\/$/, "")}`;
+    const normalizedTarget = targetUrl.toLowerCase();
+    const existing = existingRepos.find((r) => {
+      const u = r.url.toLowerCase().replace(/\.git$/, "").replace(/\/$/, "");
+      return u === normalizedTarget;
+    });
+    if (existing) {
+      onConnected(existing, true);
+      return;
+    }
+
     setLoading(true);
     try {
-      const repo = await api.connect(
-        `https://github.com${parsed.pathname.replace(/\/$/, "")}`,
-        branch.trim(),
-      );
-      onConnected(repo);
+      const repo = await api.connect(targetUrl, branch.trim());
+      onConnected(repo, false);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Unable to connect. Please retry.",

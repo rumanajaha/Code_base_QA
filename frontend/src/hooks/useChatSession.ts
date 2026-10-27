@@ -188,6 +188,19 @@ export function useChatSession(
     setToast("Conversation exported.");
   }
 
+  function deleteRepoChat(repoId: string) {
+    setChats((c) => {
+      const next = { ...c };
+      delete next[repoId];
+      try {
+        localStorage.setItem("codebase-chats-v1", JSON.stringify(next));
+      } catch {
+        // Ignore write error
+      }
+      return next;
+    });
+  }
+
   return {
     chats,
     messages,
@@ -210,6 +223,7 @@ export function useChatSession(
     openCitation,
     clearCitation,
     clearAllChats,
+    deleteRepoChat,
     send,
     newChat,
     exportChat,

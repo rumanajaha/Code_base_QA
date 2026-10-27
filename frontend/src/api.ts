@@ -210,6 +210,14 @@ function normalizeRepo(r: BackendRepo): Repository {
     branch: r.branch || "default",
     status: r.status ?? r.state ?? "queued",
     demo: r.demo,
+    files: r.files,
+    chunks: r.chunks,
+    graph_nodes: r.graph_nodes,
+    graph_edges: r.graph_edges,
+    unresolved_calls: r.unresolved_calls,
+    stage: r.stage,
+    progress: r.progress,
+    error: r.error,
   };
 }
 type BackendStatus = Partial<Ingestion> & { state?: Ingestion["status"] };
@@ -225,7 +233,9 @@ export const api = {
   async repos(): Promise<Repository[]> {
     if (isDemo) {
       await pause(240);
-      return [...demoRepos];
+      return demoRepos.map((r) =>
+        r.status === "ready" ? { ...demoStats, ...r, status: r.status } : r,
+      );
     }
     const result = await request<unknown>("/repos");
     let list: BackendRepo[];

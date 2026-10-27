@@ -4,9 +4,10 @@ import RepoConnectForm from "./RepoConnectForm";
 interface ConnectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConnected: (r: Repository) => void;
+  onConnected: (r: Repository, wasExisting?: boolean) => void;
   disabled?: boolean;
   disabledReason?: string;
+  existingRepos?: Repository[];
 }
 
 export default function ConnectModal({
@@ -15,6 +16,7 @@ export default function ConnectModal({
   onConnected,
   disabled,
   disabledReason,
+  existingRepos = [],
 }: ConnectModalProps) {
   if (!isOpen) return null;
 
@@ -32,6 +34,7 @@ export default function ConnectModal({
           onClose={onClose}
           disabled={disabled}
           disabledReason={disabledReason}
+          existingRepos={existingRepos}
         />
       </div>
     </div>
