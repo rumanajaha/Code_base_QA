@@ -37,7 +37,8 @@ import {
   Workflow,
   X,
 } from "lucide-react";
-import { api, isDemo } from "./api";
+import { api, apiBase, isDemo } from "./api";
+import { useBackendStatus, type BackendState } from "./hooks/useBackendStatus";
 import type { Citation, Ingestion, Message, Mode, Repository } from "./types";
 import AnswerCard from "./components/AnswerCard";
 import CodeViewer from "./components/CodeViewer";
@@ -137,6 +138,59 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [reindexing, setReindexing] = useState(false);
   const [listRefresh, setListRefresh] = useState(0);
+  const [showStatusPopover, setShowStatusPopover] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const footerBtnRef = useRef<HTMLButtonElement>(null);
+
+  const backendStatus = useBackendStatus();
+  const prevBackendStateRef = useRef<BackendState>(backendStatus.state);
+
+  const isBackendBlocked =
+    backendStatus.state === "unreachable" ||
+    backendStatus.state === "misconfigured";
+  const backendBlockedReason =
+    backendStatus.state === "misconfigured"
+      ? (backendStatus.message || "Backend URL is misconfigured. Please check VITE_API_URL.")
+      : "Backend is unreachable. Please start the backend or check the connection.";
+
+  // When state changes from unreachable to connected, reload the repository list automatically
+  useEffect(() => {
+    if (
+      prevBackendStateRef.current === "unreachable" &&
+      backendStatus.state === "connected"
+    ) {
+      setListRefresh((r) => r + 1);
+    }
+    prevBackendStateRef.current = backendStatus.state;
+  }, [backendStatus.state]);
+
+  // Status popover: outside click and Escape handling
+  useEffect(() => {
+    if (!showStatusPopover) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowStatusPopover(false);
+        footerBtnRef.current?.focus();
+      }
+    };
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target as Node) &&
+        footerBtnRef.current &&
+        !footerBtnRef.current.contains(e.target as Node)
+      ) {
+        setShowStatusPopover(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showStatusPopover]);
+
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const activeRef = useRef(activeId);
@@ -160,7 +214,7 @@ export default function App() {
   }, [question]);
   useEffect(() => {
     if (!showConnect && !showHelp) return;
-    const dialog = document.querySelector<HTMLElement>("[role=dialog]");
+    const dialog = document.querySelector<HTMLElement>(".modal-backdrop [role=dialog]");
     const previous = document.activeElement as HTMLElement | null;
     const elements = () =>
       Array.from(
@@ -739,17 +793,167 @@ export default function App() {
               </div>
               <span className="note-spark">✳</span>
             </div>
-            <button
-              className="sidebar-footer"
-              onClick={() => setShowHelp(true)}
-            >
-              <span className="status-light" />
-              {isDemo ? "Demo mode · sample code" : "Connected to your API"}
-              <ArrowUpRight size={12} />
-            </button>
+            <div className="sidebar-footer-wrap">
+              {showStatusPopover && (
+                <div
+                  ref={popoverRef}
+                  className="status-popover"
+                  role="dialog"
+                  aria-modal="false"
+                  aria-label="Backend connection status"
+                >
+                  <div className="status-popover-header">
+                    <span className="status-popover-title">
+                      <span className={`status-light ${backendStatus.state}`} />
+                      Backend status
+                    </span>
+                    <button
+                      type="button"
+                      className="ghost-button icon-button"
+                      style={{ padding: "2px", width: "18px", height: "18px" }}
+                      onClick={() => setShowStatusPopover(false)}
+                      aria-label="Close status popover"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+
+                  <div className="status-popover-row">
+                    <span className="status-popover-label">API URL:</span>
+                    <span className="status-popover-value" title={apiBase || ""}>
+                      {apiBase || (isDemo ? "Demo (no backend)" : "(empty)")}
+                    </span>
+                  </div>
+
+                  <div className="status-popover-row">
+                    <span className="status-popover-label">State:</span>
+                    <span className="status-popover-value">{backendStatus.state}</span>
+                  </div>
+
+                  <div className="status-popover-row">
+                    <span className="status-popover-label">Latency:</span>
+                    <span className="status-popover-value">
+                      {backendStatus.latencyMs != null
+                        ? `${backendStatus.latencyMs} ms`
+                        : "—"}
+                    </span>
+                  </div>
+
+                  <div className="status-popover-row">
+                    <span className="status-popover-label">Last check:</span>
+                    <span className="status-popover-value">
+                      {backendStatus.lastChecked
+                        ? backendStatus.lastChecked.toLocaleTimeString()
+                        : "Never"}
+                    </span>
+                  </div>
+
+                  {backendStatus.details && (
+                    <div className="status-popover-chips">
+                      {typeof backendStatus.details.neo4j === "boolean" && (
+                        <span
+                          className={`status-chip ${backendStatus.details.neo4j ? "ok" : "fail"}`}
+                        >
+                          Neo4j: {backendStatus.details.neo4j ? "ok" : "failed"}
+                        </span>
+                      )}
+                      {typeof backendStatus.details.chroma === "boolean" && (
+                        <span
+                          className={`status-chip ${backendStatus.details.chroma ? "ok" : "fail"}`}
+                        >
+                          Chroma: {backendStatus.details.chroma ? "ok" : "failed"}
+                        </span>
+                      )}
+                      {typeof backendStatus.details.llm_configured === "boolean" && (
+                        <span
+                          className={`status-chip ${backendStatus.details.llm_configured ? "ok" : "fail"}`}
+                        >
+                          LLM: {backendStatus.details.llm_configured ? "ok" : "missing"}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {backendStatus.message && (
+                    <div className="status-popover-error">
+                      {backendStatus.message}
+                    </div>
+                  )}
+
+                  <div className="status-popover-actions">
+                    <button
+                      type="button"
+                      className="status-popover-btn"
+                      onClick={() => backendStatus.retry()}
+                    >
+                      <RotateCw size={11} />
+                      Check again
+                    </button>
+                    {!isDemo && apiBase && (
+                      <a
+                        href={`${apiBase}/docs`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="status-popover-btn"
+                      >
+                        Open API docs ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <button
+                ref={footerBtnRef}
+                type="button"
+                className="sidebar-footer"
+                onClick={() => setShowStatusPopover((open) => !open)}
+                aria-expanded={showStatusPopover}
+                aria-haspopup="dialog"
+                aria-label="Backend status"
+              >
+                <span className={`status-light ${backendStatus.state}`} />
+                <span>
+                  {backendStatus.state === "connected" &&
+                    (backendStatus.latencyMs != null
+                      ? `Backend connected · ${backendStatus.latencyMs} ms`
+                      : "Backend connected")}
+                  {backendStatus.state === "checking" && "Checking backend…"}
+                  {backendStatus.state === "unreachable" && "Backend unreachable"}
+                  {backendStatus.state === "misconfigured" && "Backend URL misconfigured"}
+                  {backendStatus.state === "demo" && "Demo mode · sample code"}
+                </span>
+                <ArrowUpRight size={12} />
+              </button>
+            </div>
           </div>
         </aside>
         <main className="chat-panel panel">
+          {isBackendBlocked && (
+            <div className="backend-warning-banner" role="alert">
+              <div className="backend-warning-content">
+                <TriangleAlert size={15} style={{ flexShrink: 0 }} />
+                <span>
+                  <strong>
+                    {backendStatus.state === "misconfigured"
+                      ? "Backend URL misconfigured:"
+                      : "Backend unreachable:"}
+                  </strong>{" "}
+                  {backendStatus.message || "Cannot communicate with backend."}{" "}
+                  <span className="backend-warning-hints">
+                    (What to try: start the backend server; check VITE_API_URL; check CORS)
+                  </span>
+                </span>
+              </div>
+              <button
+                type="button"
+                className="backend-warning-retry-btn"
+                onClick={() => backendStatus.retry()}
+              >
+                Retry
+              </button>
+            </div>
+          )}
           <div className="chat-header">
             <div className="chat-header-title">
               <span className="chat-header-icon">
@@ -1102,9 +1306,13 @@ export default function App() {
                 <button
                   className="send-button"
                   onClick={() => void send()}
-                  disabled={!ready || !question.trim() || querying}
+                  disabled={!ready || !question.trim() || querying || isBackendBlocked}
                   aria-label="Send question"
-                  title="Send question (Enter)"
+                  title={
+                    isBackendBlocked
+                      ? backendBlockedReason
+                      : "Send question (Enter)"
+                  }
                 >
                   {busy ? (
                     <Loader2 className="spin" size={18} />
@@ -1220,6 +1428,8 @@ export default function App() {
             <RepoConnectForm
               onConnected={connected}
               onClose={() => setShowConnect(false)}
+              disabled={isBackendBlocked}
+              disabledReason={backendBlockedReason}
             />
           </div>
         </div>

@@ -12,9 +12,13 @@ import type { Repository } from "../types";
 export default function RepoConnectForm({
   onConnected,
   onClose,
+  disabled = false,
+  disabledReason,
 }: {
   onConnected: (r: Repository) => void;
   onClose?: () => void;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   const [url, setUrl] = useState("");
   const [branch, setBranch] = useState("");
@@ -108,7 +112,12 @@ export default function RepoConnectForm({
           repository.
         </div>
       )}
-      <button className="primary-button" type="submit" disabled={loading}>
+      <button
+        className="primary-button"
+        type="submit"
+        disabled={loading || disabled}
+        title={disabled ? disabledReason : undefined}
+      >
         {loading ? <Loader2 className="spin" size={15} /> : <Plus size={15} />}{" "}
         {loading ? "Connecting…" : "Connect repository"}
         {!loading && <ArrowUpRight size={14} />}
