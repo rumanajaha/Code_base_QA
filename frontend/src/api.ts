@@ -1,11 +1,35 @@
-import type { Answer, CodeFile, Ingestion, Mode, Repository } from "./types";
+import type { Answer, CodeFile, HealthResult, Ingestion, Mode, Repository, } from "./types";
 import { demoAnswer, demoFiles, demoStats, sampleRepo } from "./demo";
-let rawBase = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
-if (rawBase && !/^https?:\/\//i.test(rawBase)) {
-  rawBase = "http://" + rawBase;
+
+// 1) Base URL validation at module load
+const rawUrl = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+let apiBase = rawUrl;
+let configError: string | null = null;
+const isDemo = !rawUrl;
+
+if (rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      configError =
+        "VITE_API_URL must start with http:// or https://, for example http://127.0.0.1:8000";
+    } else if (
+      typeof window !== "undefined" &&
+      window.location &&
+      parsed.origin === window.location.origin
+    ) {
+      const portStr =
+        parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+      configError = `VITE_API_URL points at the frontend itself (port ${portStr}); it must be the backend address`;
+    }
+  } catch {
+    configError =
+      "VITE_API_URL must start with http:// or https://, for example http://127.0.0.1:8000";
+  }
 }
-const base = rawBase;
-export const isDemo = !base;
+
+export { apiBase, isDemo, configError };
+
 const pause = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 const storageKey = "codebase-demo-repos-v1";
@@ -22,59 +46,152 @@ const starts = new Map<string, number>();
 function save() {
   localStorage.setItem(storageKey, JSON.stringify(demoRepos));
 }
+
 export class ApiError extends Error {
   constructor(
     message: string,
     public status = 0,
   ) {
     super(message);
+    this.name = "ApiError";
   }
 }
+
+// 3) Error bodies: parse FastAPI details or map status codes
+function parseErrorMessage(data: unknown, status: number): string {
+  if (data && typeof data === "object") {
+    const detail = (data as { detail?: unknown }).detail;
+    if (typeof detail === "string" && detail.trim()) {
+      return detail;
+    }
+    if (Array.isArray(detail) && detail.length > 0) {
+      const formatted = detail.map((item: unknown) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const loc = (item as { loc?: unknown[] }).loc;
+          const msg = (item as { msg?: string }).msg || "Invalid value";
+          if (Array.isArray(loc) && loc.length > 0) {
+            const field = loc.filter((part) => part !== "body").join(".");
+            return field ? `${field}: ${msg}` : msg;
+          }
+          return msg;
+        }
+        return String(item);
+      });
+      return formatted.join("; ");
+    }
+    const fallbackMsg =
+      (data as { error?: unknown }).error ??
+      (data as { message?: unknown }).message;
+    if (typeof fallbackMsg === "string" && fallbackMsg.trim()) {
+      return fallbackMsg;
+    }
+  }
+
+  if (status === 404) return "Not found";
+  if (status === 409) return "The repository is still being indexed";
+  if (status === 422) return "The request was invalid";
+  if (status === 501) return "This feature is not available on the backend yet";
+  if (status >= 500 && status < 600)
+    return "The backend had an error; check its terminal";
+  return `Request failed (${status}). Please try again.`;
+}
+
+// 2) request() with error handling, DEV logging, and signal support
 async function request<T>(
   path: string,
   init?: RequestInit,
   timeoutMs = 60000,
+  externalSignal?: AbortSignal,
 ): Promise<T> {
+  if (configError) {
+    throw new ApiError(configError, 0);
+  }
+
+  const fullUrl = apiBase + path;
+  const method = (init?.method || "GET").toUpperCase();
+  const startTime = Date.now();
+
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  let onAbort: (() => void) | undefined;
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      clearTimeout(timer);
+      throw new ApiError("The request was cancelled.", 0);
+    }
+    onAbort = () => controller.abort();
+    externalSignal.addEventListener("abort", onAbort);
+  }
+
   try {
-    const res = await fetch(base + path, {
+    const res = await fetch(fullUrl, {
       ...init,
       signal: controller.signal,
       headers: { "Content-Type": "application/json", ...init?.headers },
     });
-    const data = await res.json().catch(() => null);
+
+    const duration = Date.now() - startTime;
+    if (import.meta.env.DEV) {
+      console.debug(`${method} ${fullUrl} -> ${res.status} in ${duration} ms`);
+    }
+
+    const contentType = res.headers.get("content-type") || "";
+    const isJson = contentType.includes("application/json");
+    const data = isJson ? await res.json().catch(() => null) : null;
+
     if (!res.ok) {
-      const detail = data?.detail ?? data?.error ?? data?.message;
+      const message = parseErrorMessage(data, res.status);
+      throw new ApiError(message, res.status);
+    }
+
+    if (!isJson || data === null || data === undefined) {
       throw new ApiError(
-        typeof detail === "string"
-          ? detail
-          : Array.isArray(detail)
-            ? detail.map((d) => d.msg).join("; ")
-            : `Request failed (${res.status}). Please try again.`,
+        `The server at ${fullUrl} did not return JSON. Check that VITE_API_URL points to the FastAPI backend.`,
         res.status,
       );
     }
-    if (data === null) {
-      throw new ApiError(
-        `Received non-JSON response from ${base + path}. Check that VITE_API_URL points to the backend (port 8000), not the frontend.`,
-        res.status,
-      );
-    }
+
     return data as T;
   } catch (e) {
+    const duration = Date.now() - startTime;
+    if (import.meta.env.DEV && !(e instanceof ApiError)) {
+      console.debug(`${method} ${fullUrl} -> error in ${duration} ms`);
+    }
+
     if (e instanceof ApiError) throw e;
-    if (e instanceof Error && e.name === "AbortError")
-      throw new ApiError("The request took too long. Please try again.");
+
+    if (externalSignal?.aborted) {
+      throw new ApiError("The request was cancelled.", 0);
+    }
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new ApiError("The request took too long. Please try again.", 0);
+    }
+    if (e instanceof TypeError) {
+      const origin =
+        typeof window !== "undefined" && window.location
+          ? window.location.origin
+          : "the frontend origin";
+      throw new ApiError(
+        `Unable to reach ${fullUrl}. Is the backend running? Is ${origin} in the backend CORS_ORIGINS?`,
+        0,
+      );
+    }
+
     throw new ApiError(
-      "Unable to reach the API. Check your connection and backend URL, then retry.",
+      `Unable to reach the API at ${fullUrl}. Check your connection and backend URL, then retry.`,
+      0,
     );
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(timer);
+    if (externalSignal && onAbort) {
+      externalSignal.removeEventListener("abort", onAbort);
+    }
   }
 }
-// The backend and the UI name some fields differently. These adapters translate
-// the backend contract (repo_id, state, lines[]) into the UI types in one place.
+
+// Adapters translating backend fields to UI types
 type BackendRepo = Partial<Repository> & {
   repo_id?: string;
   repo_url?: string;
@@ -102,18 +219,33 @@ type BackendCode = Partial<CodeFile> & {
   end?: number;
   lines?: { n: number; text: string }[];
 };
+
 export const api = {
+  // 4) repos() accepting [], an array, or { repos: [...] }
   async repos(): Promise<Repository[]> {
     if (isDemo) {
       await pause(240);
       return [...demoRepos];
     }
-    const result = await request<BackendRepo[] | { repos: BackendRepo[] }>(
-      "/repos",
-    );
-    const list = Array.isArray(result) ? result : (result?.repos ?? []);
+    const result = await request<unknown>("/repos");
+    let list: BackendRepo[];
+    if (Array.isArray(result)) {
+      list = result;
+    } else if (
+      result &&
+      typeof result === "object" &&
+      Array.isArray((result as { repos?: unknown }).repos)
+    ) {
+      list = (result as { repos: BackendRepo[] }).repos;
+    } else {
+      throw new ApiError(
+        "Unexpected response format from /repos: expected an array or { repos: [...] }",
+        200,
+      );
+    }
     return list.map(normalizeRepo);
   },
+
   async connect(url: string, branch: string): Promise<Repository> {
     if (!isDemo) {
       const data = await request<BackendRepo>("/repos", {
@@ -141,11 +273,18 @@ export const api = {
     save();
     return repo;
   },
+
   async status(id: string): Promise<Ingestion> {
     if (!isDemo) {
       const d = await request<BackendStatus>(
         `/repos/${encodeURIComponent(id)}/status`,
       );
+      if (!d || typeof d !== "object") {
+        throw new ApiError(
+          "Unexpected response format from /status: expected an object",
+          200,
+        );
+      }
       return {
         files: 0,
         chunks: 0,
@@ -188,14 +327,34 @@ export const api = {
               : "Finishing the index",
     };
   },
-  async query(repo_id: string, question: string, mode: Mode): Promise<Answer> {
+
+  // 7) query() with optional AbortSignal parameter
+  async query(
+    repo_id: string,
+    question: string,
+    mode: Mode,
+    signal?: AbortSignal,
+  ): Promise<Answer> {
     if (!isDemo) {
       // Queries can be slow on a rate-limited free LLM plan, so allow 3 minutes.
       const a = await request<Answer>(
         "/query",
         { method: "POST", body: JSON.stringify({ repo_id, question, mode }) },
         180000,
+        signal,
       );
+      if (
+        !a ||
+        typeof a !== "object" ||
+        typeof a.text !== "string" ||
+        !Array.isArray(a.citations) ||
+        !Array.isArray(a.retrieved)
+      ) {
+        throw new ApiError(
+          "Unexpected response format from /query: missing text, citations, or retrieved array",
+          200,
+        );
+      }
       return {
         ...a,
         text: a.text ?? "",
@@ -204,9 +363,12 @@ export const api = {
         unsupported_items: a.unsupported_items ?? [],
       };
     }
+    if (signal?.aborted) throw new ApiError("The request was cancelled.", 0);
     await pause(1400);
+    if (signal?.aborted) throw new ApiError("The request was cancelled.", 0);
     return demoAnswer(question, mode);
   },
+
   async code(
     repo_id: string,
     file: string,
@@ -236,6 +398,9 @@ export const api = {
     const data = await request<BackendCode | string>(
       `/repos/${encodeURIComponent(repo_id)}/code?${params}`,
     );
+    if (!data || (typeof data !== "object" && typeof data !== "string")) {
+      throw new ApiError("Unexpected response format from /code", 200);
+    }
     const fallbackStart = Math.max(1, start - 8);
     if (typeof data === "string")
       return {
@@ -261,6 +426,59 @@ export const api = {
       end_line: data.end_line ?? data.end ?? end + 12,
     };
   },
+
+  // 5) health(): GET /health with a 5 second timeout, never throws
+  async health(): Promise<HealthResult> {
+    const start = Date.now();
+    try {
+      if (isDemo) {
+        await pause(80);
+        return {
+          ok: true,
+          latencyMs: Date.now() - start,
+          details: { status: "ok", mode: "demo" },
+        };
+      }
+      const data = await request<unknown>("/health", undefined, 5000);
+      return {
+        ok: true,
+        latencyMs: Date.now() - start,
+        details: data,
+      };
+    } catch (e) {
+      return {
+        ok: false,
+        latencyMs: Date.now() - start,
+        error: e instanceof Error ? e.message : "Health check failed",
+      };
+    }
+  },
+
+  // 6) deleteRepo(id): DELETE /repos/{id}
+  async deleteRepo(id: string): Promise<void> {
+    if (!isDemo) {
+      try {
+        await request(`/repos/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        });
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 404 || e.status === 405)) {
+          throw new ApiError(
+            e.status === 405 || e.message.toLowerCase().includes("not allowed")
+              ? "Repository deletion is not supported by the backend."
+              : e.message,
+            e.status,
+          );
+        }
+        throw e;
+      }
+      return;
+    }
+    await pause(240);
+    demoRepos = demoRepos.filter((r) => r.id !== id);
+    save();
+  },
+
   async reindex(id: string): Promise<void> {
     if (!isDemo) {
       await request(`/repos/${encodeURIComponent(id)}/reindex`, {
@@ -276,6 +494,7 @@ export const api = {
       save();
     }
   },
+
   async resetDemo(): Promise<void> {
     if (!isDemo) return;
     demoRepos = [];
