@@ -15,6 +15,7 @@ export interface Repository {
   stage?: string;
   progress?: number;
   error?: string;
+  already_indexed?: boolean;
 }
 export interface Ingestion {
   status: RepoState;

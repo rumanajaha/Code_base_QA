@@ -196,10 +196,40 @@ type BackendRepo = Partial<Repository> & {
   repo_id?: string;
   repo_url?: string;
   state?: Repository["status"];
+  already_indexed?: boolean;
 };
+
+export interface BranchListResult {
+  defaultBranch: string;
+  branches: string[];
+  truncated: boolean;
+}
+
+const branchCache = new Map<string, BranchListResult>();
+
+function getRepoName(r: BackendRepo, id: string): string {
+  if (r.repo_url) {
+    try {
+      const u = new URL(r.repo_url);
+      const parts = u.pathname
+        .replace(/^\/+|\/+$/g, "")
+        .replace(/\.git$/, "")
+        .split("/");
+      if (parts.length >= 2) return `${parts[0]}/${parts[1]}`;
+    } catch {
+      // fallback
+    }
+  }
+  if (id.includes("__")) {
+    const parts = id.split("__");
+    if (parts.length >= 2) return `${parts[0]}/${parts[1]}`;
+  }
+  return r.name ?? id.replace("__", "/");
+}
+
 function normalizeRepo(r: BackendRepo): Repository {
   const id = r.id ?? r.repo_id ?? "";
-  const name = r.name ?? id.replace("__", "/");
+  const name = getRepoName(r, id);
   return {
     id,
     name: name || "Repository",
@@ -207,7 +237,7 @@ function normalizeRepo(r: BackendRepo): Repository {
       r.url ??
       r.repo_url ??
       (id.includes("__") ? `https://github.com/${name}` : ""),
-    branch: r.branch || "default",
+    branch: r.branch || "main",
     status: r.status ?? r.state ?? "queued",
     demo: r.demo,
     files: r.files,
@@ -218,6 +248,7 @@ function normalizeRepo(r: BackendRepo): Repository {
     stage: r.stage,
     progress: r.progress,
     error: r.error,
+    already_indexed: r.already_indexed,
   };
 }
 type BackendStatus = Partial<Ingestion> & { state?: Ingestion["status"] };
@@ -229,6 +260,38 @@ type BackendCode = Partial<CodeFile> & {
 };
 
 export const api = {
+  async branches(url: string, signal?: AbortSignal): Promise<BranchListResult> {
+    const cached = branchCache.get(url);
+    if (cached) {
+      return cached;
+    }
+
+    if (isDemo) {
+      await pause(300);
+      const demoResult: BranchListResult = {
+        defaultBranch: "main",
+        branches: ["main", "develop"],
+        truncated: false,
+      };
+      branchCache.set(url, demoResult);
+      return demoResult;
+    }
+
+    const res = await request<{
+      default_branch: string;
+      branches: string[];
+      truncated?: boolean;
+    }>(`/branches?repo_url=${encodeURIComponent(url)}`, { signal });
+
+    const result: BranchListResult = {
+      defaultBranch: res.default_branch,
+      branches: res.branches,
+      truncated: Boolean(res.truncated),
+    };
+    branchCache.set(url, result);
+    return result;
+  },
+
   // 4) repos() accepting [], an array, or { repos: [...] }
   async repos(): Promise<Repository[]> {
     if (isDemo) {
@@ -256,13 +319,18 @@ export const api = {
     return list.map(normalizeRepo);
   },
 
-  async connect(url: string, branch: string): Promise<Repository> {
+  async connect(url: string, branch?: string): Promise<Repository> {
     if (!isDemo) {
-      const data = await request<BackendRepo>("/repos", {
+      const data = await request<BackendRepo & { already_indexed?: boolean }>("/repos", {
         method: "POST",
         body: JSON.stringify({ repo_url: url, branch: branch || undefined }),
       });
-      return normalizeRepo({ repo_url: url, branch, state: "queued", ...data });
+      return normalizeRepo({
+        repo_url: url,
+        branch: data.branch || branch || "main",
+        state: data.state ?? "queued",
+        ...data,
+      });
     }
     await pause(550);
     if (demoRepos.some((r) => r.url === url && r.branch === (branch || "main")))

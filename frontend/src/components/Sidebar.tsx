@@ -33,6 +33,7 @@ interface SidebarProps {
   onRetryPolling?: () => void;
   getElapsedSeconds?: (id: string) => number;
   onRequestRemove?: (repo: Repository) => void;
+  onIndexAnotherBranch?: (repo: Repository) => void;
 }
 
 export default function Sidebar({
@@ -53,6 +54,7 @@ export default function Sidebar({
   onRetryPolling = () => {},
   getElapsedSeconds = () => 0,
   onRequestRemove = () => {},
+  onIndexAnotherBranch,
 }: SidebarProps) {
   const [filter, setFilter] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -176,6 +178,7 @@ export default function Sidebar({
                   }
                   onCloseMenu={() => setMenuRepoId(null)}
                   onRequestRemove={onRequestRemove}
+                  onIndexAnotherBranch={onIndexAnotherBranch}
                   menuRef={menuRef}
                 />
               );

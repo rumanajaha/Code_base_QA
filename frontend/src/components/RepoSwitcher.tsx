@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, GitBranch } from "lucide-react";
 import type { Repository } from "../types";
 import RepoSwitcherMenu from "./RepoSwitcherMenu";
 
@@ -29,6 +29,10 @@ export default function RepoSwitcher({
   const switcherTriggerRef = useRef<HTMLButtonElement>(null);
 
   const activeRepo = repos.find((r) => r.id === activeId);
+  const isNonDefault =
+    Boolean(activeRepo?.branch) &&
+    !["main", "master", "default"].includes(activeRepo!.branch.toLowerCase()) &&
+    (activeRepo!.id.split("__").length > 2 || !["main", "master"].includes(activeRepo!.branch.toLowerCase()));
 
   const filteredSwitcherRepos = repos.filter((r) =>
     r.name.toLowerCase().includes(switcherFilter.toLowerCase()),
@@ -75,6 +79,12 @@ export default function RepoSwitcher({
         <span className={`repo-switcher-dot ${activeRepo?.status || "none"}`} />
         <span className="repo-switcher-name">
           {activeRepo?.name || "Select repository"}
+          {isNonDefault && activeRepo?.branch && (
+            <span className="branch-chip" title={`Branch: ${activeRepo.branch}`}>
+              <GitBranch size={9} />
+              {activeRepo.branch}
+            </span>
+          )}
         </span>
         <ChevronDown
           size={13}

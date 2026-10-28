@@ -8,6 +8,7 @@ interface ConnectModalProps {
   disabled?: boolean;
   disabledReason?: string;
   existingRepos?: Repository[];
+  initialUrl?: string;
 }
 
 export default function ConnectModal({
@@ -17,6 +18,7 @@ export default function ConnectModal({
   disabled,
   disabledReason,
   existingRepos = [],
+  initialUrl = "",
 }: ConnectModalProps) {
   if (!isOpen) return null;
 
@@ -35,6 +37,7 @@ export default function ConnectModal({
           disabled={disabled}
           disabledReason={disabledReason}
           existingRepos={existingRepos}
+          initialUrl={initialUrl}
         />
       </div>
     </div>

@@ -10,6 +10,7 @@ interface SidebarRepoCardProps {
   onToggleMenu: () => void;
   onCloseMenu: () => void;
   onRequestRemove: (repo: Repository) => void;
+  onIndexAnotherBranch?: (repo: Repository) => void;
   menuRef?: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -22,9 +23,14 @@ export default function SidebarRepoCard({
   onToggleMenu,
   onCloseMenu,
   onRequestRemove,
+  onIndexAnotherBranch,
   menuRef,
 }: SidebarRepoCardProps) {
   const isReady = repo.status === "ready";
+  const isNonDefault =
+    Boolean(repo.branch) &&
+    !["main", "master", "default"].includes(repo.branch.toLowerCase()) &&
+    (repo.id.split("__").length > 2 || !["main", "master"].includes(repo.branch.toLowerCase()));
 
   return (
     <div
@@ -42,7 +48,15 @@ export default function SidebarRepoCard({
             <Github size={18} />
           </span>
           <div>
-            <strong>{repo.name}</strong>
+            <strong>
+              {repo.name}
+              {isNonDefault && (
+                <span className="branch-chip" title={`Branch: ${repo.branch}`}>
+                  <GitBranch size={9} />
+                  {repo.branch}
+                </span>
+              )}
+            </strong>
             <span>
               <GitBranch size={11} />
               {repo.branch} <i />
@@ -86,6 +100,21 @@ export default function SidebarRepoCard({
       </button>
       {isMenuOpen && (
         <div className="repo-card-menu" role="menu">
+          {onIndexAnotherBranch && (
+            <button
+              type="button"
+              className="repo-card-menu-item"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCloseMenu();
+                onIndexAnotherBranch(repo);
+              }}
+              role="menuitem"
+            >
+              <GitBranch size={13} />
+              <span>Index another branch…</span>
+            </button>
+          )}
           <button
             type="button"
             className="repo-card-menu-item danger"

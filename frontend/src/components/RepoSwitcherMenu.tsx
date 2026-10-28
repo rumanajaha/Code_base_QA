@@ -173,6 +173,10 @@ export default function RepoSwitcherMenu({
           filteredRepos.map((r, i) => {
             const isActive = r.id === activeId;
             const isHighlighted = i === switcherIndex;
+            const isNonDefault =
+              Boolean(r.branch) &&
+              !["main", "master", "default"].includes(r.branch.toLowerCase()) &&
+              (r.id.split("__").length > 2 || !["main", "master"].includes(r.branch.toLowerCase()));
             return (
               <button
                 key={r.id}
@@ -187,7 +191,15 @@ export default function RepoSwitcherMenu({
                 <div className="repo-switcher-item-main">
                   <span className={`repo-switcher-dot ${r.status}`} />
                   <div className="repo-switcher-item-info">
-                    <span className="repo-switcher-item-name">{r.name}</span>
+                    <span className="repo-switcher-item-name">
+                      {r.name}
+                      {isNonDefault && (
+                        <span className="branch-chip" title={`Branch: ${r.branch}`}>
+                          <GitBranch size={9} />
+                          {r.branch}
+                        </span>
+                      )}
+                    </span>
                     <span className="repo-switcher-item-branch">
                       <GitBranch size={10} />
                       {r.branch}

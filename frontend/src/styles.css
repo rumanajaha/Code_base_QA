@@ -2525,16 +2525,50 @@ kbd {
   border-color: #a3b4d2;
   box-shadow: 0 0 0 2px #8eafd910;
 }
-.input-wrap > input {
+.input-wrap > input,
+.input-wrap > select {
   border: 0;
   background: none;
   color: var(--text);
   font-size: 11px;
   width: 100%;
   min-width: 0;
+  outline: none;
+}
+.input-wrap > select {
+  cursor: pointer;
+  appearance: auto;
+  -webkit-appearance: auto;
+}
+.input-wrap > select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.input-wrap > select option {
+  background: var(--surface, #1e2024);
+  color: var(--text);
 }
 .input-wrap input::placeholder {
   color: var(--subtle);
+}
+.branch-hint {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.branch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--primary, #6366f1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  margin-left: 6px;
+  vertical-align: middle;
 }
 .demo-connect-note {
   background: var(--soft);

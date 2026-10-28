@@ -21,6 +21,7 @@ import RemoveRepoModal from "./components/RemoveRepoModal";
 export default function App() {
   const { settings, updateSettings, toggleTheme, clearAllLocalData, userInitial } = useSettings();
   const [showConnect, setShowConnect] = useState(false);
+  const [connectInitialUrl, setConnectInitialUrl] = useState("");
   const [showHelp, setShowHelp] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showClearData, setShowClearData] = useState(false);
@@ -129,6 +130,10 @@ export default function App() {
           onRetryPolling={retryPolling}
           getElapsedSeconds={getElapsedSeconds}
           onRequestRemove={(r) => setRepoToRemove(r)}
+          onIndexAnotherBranch={(r) => {
+            setConnectInitialUrl(r.url);
+            setShowConnect(true);
+          }}
         />
 
         <ChatPanel
@@ -151,7 +156,10 @@ export default function App() {
             await handleResetDemo();
             setToast("Demo reset. Connect a repository to get started.");
           }}
-          onConnect={() => setShowConnect(true)}
+          onConnect={() => {
+            setConnectInitialUrl("");
+            setShowConnect(true);
+          }}
           querying={chat.querying}
           busy={chat.busy}
           ready={ready}
@@ -190,20 +198,27 @@ export default function App() {
 
       <ConnectModal
         isOpen={showConnect}
-        onClose={() => setShowConnect(false)}
+        onClose={() => {
+          setShowConnect(false);
+          setConnectInitialUrl("");
+        }}
+        initialUrl={connectInitialUrl}
         existingRepos={repos}
         onConnected={(r, wasExisting) => {
           setActiveId(r.id);
           setShowConnect(false);
           setShowSidebar(false);
-          setToast(
-            wasExisting
-              ? `Selected existing repository "${r.name}".`
-              : isDemo
+          setConnectInitialUrl("");
+          if (wasExisting || r.already_indexed) {
+            setToast("This branch is already indexed");
+          } else {
+            setToast(
+              isDemo
                 ? "Sample indexing started. Demo code will be used."
                 : "Repository connected. Indexing has started.",
-          );
-          if (!wasExisting) handleConnected(r.id);
+            );
+            handleConnected(r.id);
+          }
         }}
         disabled={isBackendBlocked}
         disabledReason={backendBlockedReason}
