@@ -59,9 +59,6 @@ export default function App() {
   } = useRepositories(backendStatus.state);
 
   const ready = activeRepo?.status === "ready";
-  const canReindex = Boolean(
-    activeRepo && (activeRepo.status === "ready" || activeRepo.status === "failed") && !reindexing,
-  );
 
   const chat = useChatSession(
     activeRepo,
@@ -101,13 +98,6 @@ export default function App() {
   return (
     <div className="app-shell">
       <Topbar
-        repos={repos}
-        activeId={activeId}
-        onSelectRepo={setActiveId}
-        onConnect={() => setShowConnect(true)}
-        onReindex={reindex}
-        canReindex={canReindex}
-        reindexing={reindexing}
         onOpenSidebar={() => setShowSidebar(true)}
         onOpenHelp={() => setShowHelp(true)}
         onOpenSettings={() => setShowSettings(true)}
@@ -197,12 +187,6 @@ export default function App() {
         />
       </div>
 
-      <footer className="app-footer">
-        <span>UNDERSTAND THE CODE. TRUST THE CONTEXT.</span>
-        <span>
-          Made for the curious developer <span className="footer-star">✳</span>
-        </span>
-      </footer>
 
       <ConnectModal
         isOpen={showConnect}

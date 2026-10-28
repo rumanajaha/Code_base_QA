@@ -1,4 +1,4 @@
-import { Code2, Layers3, PanelRightClose, Workflow } from "lucide-react";
+import { Code2, Layers3, Workflow } from "lucide-react";
 import type { Answer, Citation, Repository } from "../types";
 import CodeViewer from "./CodeViewer";
 import ProvenancePanel from "./ProvenancePanel";
@@ -42,14 +42,6 @@ export default function EvidencePanel({
             </span>
             <h2>Evidence</h2>
           </div>
-          <button
-            className="icon-button small"
-            aria-label="Close evidence panel"
-            title="Close evidence panel"
-            onClick={onCloseEvidence}
-          >
-            <PanelRightClose size={17} />
-          </button>
         </div>
         <div
           className="evidence-tabs"

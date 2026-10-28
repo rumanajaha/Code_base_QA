@@ -15,7 +15,7 @@ from app.ingest_service import (
     run_ingestion_task,
     update_status,
 )
-from app.ingestion.github_client import parse_repo_url
+from app.ingestion.github_client import clone_or_fetch, parse_repo_url
 from app.models import Answer, QueryRequest, RepoStatus
 from app.pipeline import run_query
 
@@ -173,6 +173,16 @@ def get_repository_code(
         )
 
     root_path = get_repo_root_path(repo_id)
+    if not root_path or not root_path.exists():
+        if repo_status.repo_url and repo_status.repo_url.startswith("https://github.com/"):
+            try:
+                cloned_path = clone_or_fetch(repo_status.repo_url, branch=repo_status.branch)
+                if cloned_path and cloned_path.exists():
+                    root_path = cloned_path
+                    update_status(repo_id, root_path=str(cloned_path.resolve()))
+            except Exception as e:
+                logger.warning("Could not auto-restore missing repo directory for '%s': %s", repo_id, e)
+
     if not root_path or not root_path.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

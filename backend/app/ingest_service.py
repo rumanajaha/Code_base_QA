@@ -80,7 +80,23 @@ def get_repo_root_path(repo_id: str) -> Path | None:
         if not record:
             return None
         root_str = record.get("root_path") or str(Path(settings.REPOS_DIR) / repo_id)
-        return Path(root_str).resolve()
+        path = Path(root_str).resolve()
+        if path.exists():
+            return path
+
+        default_path = (Path(settings.REPOS_DIR) / repo_id).resolve()
+        if default_path.exists():
+            return default_path
+
+        if "__" in repo_id:
+            repo_name = repo_id.split("__", 1)[1]
+            repos_dir = Path(settings.REPOS_DIR).resolve()
+            if repos_dir.exists() and repos_dir.is_dir():
+                for candidate in repos_dir.iterdir():
+                    if candidate.is_dir() and (candidate.name == repo_name or candidate.name.endswith(f"__{repo_name}")):
+                        return candidate
+
+        return path
 
 
 def update_status(repo_id: str, **fields) -> RepoStatus | None:

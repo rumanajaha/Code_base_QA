@@ -8,18 +8,9 @@ import {
   Sun,
   Trash2,
 } from "lucide-react";
-import type { Repository } from "../types";
 import Brand from "./Brand";
-import RepoSwitcher from "./RepoSwitcher";
 
 interface TopbarProps {
-  repos: Repository[];
-  activeId: string;
-  onSelectRepo: (id: string) => void;
-  onConnect: () => void;
-  onReindex: () => void;
-  canReindex: boolean;
-  reindexing: boolean;
   onOpenSidebar: () => void;
   onOpenHelp: () => void;
   onOpenSettings: () => void;
@@ -33,13 +24,6 @@ interface TopbarProps {
 }
 
 export default function Topbar({
-  repos,
-  activeId,
-  onSelectRepo,
-  onConnect,
-  onReindex,
-  canReindex,
-  reindexing,
   onOpenSidebar,
   onOpenHelp,
   onOpenSettings,
@@ -90,16 +74,6 @@ export default function Topbar({
           <Menu size={20} />
         </button>
         <Brand />
-        <span className="brand-divider" />
-        <RepoSwitcher
-          repos={repos}
-          activeId={activeId}
-          onSelectRepo={onSelectRepo}
-          onConnect={onConnect}
-          onReindex={onReindex}
-          canReindex={canReindex}
-          reindexing={reindexing}
-        />
       </div>
 
       <div className="topbar-actions">
@@ -178,18 +152,6 @@ export default function Topbar({
               >
                 <Activity size={14} />
                 <span>Backend status</span>
-              </button>
-              <button
-                type="button"
-                className="avatar-menu-item"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onOpenHelp();
-                }}
-                role="menuitem"
-              >
-                <CircleHelp size={14} />
-                <span>Quick guide</span>
               </button>
               <div className="avatar-menu-divider" />
               <button

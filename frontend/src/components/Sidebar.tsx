@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  BookOpen,
   Folder,
   Github,
   Loader2,
@@ -212,20 +211,6 @@ export default function Sidebar({
           )}
         </div>
         <div className="sidebar-bottom">
-          <div className="context-note">
-            <span className="context-note-icon">
-              <BookOpen size={17} />
-            </span>
-            <div>
-              <strong>A little context goes a long way.</strong>
-              <p>
-                Answers grounded in your code.
-                <br />
-                Connections you can actually follow.
-              </p>
-            </div>
-            <span className="note-spark">✳</span>
-          </div>
           <StatusPopover status={backendStatus} />
         </div>
       </aside>
