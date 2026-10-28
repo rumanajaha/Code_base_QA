@@ -10,3 +10,11 @@ class RepoCreateRequest(BaseModel):
 
 class RepoCreateResponse(BaseModel):
     repo_id: str
+    branch: str | None = None
+    already_indexed: bool | None = None
+
+
+class BranchListResponse(BaseModel):
+    default_branch: str
+    branches: list[str]
+    truncated: bool = False

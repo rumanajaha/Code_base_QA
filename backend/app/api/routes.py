@@ -2,26 +2,73 @@
 
 import logging
 from pathlib import Path
+import time
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi.responses import JSONResponse
 
-from app.api.schemas import RepoCreateRequest, RepoCreateResponse
+from app.api.schemas import BranchListResponse, RepoCreateRequest, RepoCreateResponse
 from app.ingest_service import (
     create_repo,
     delete_repo,
     get_repo_root_path,
     get_status,
     list_repos,
+    make_repo_id,
     run_ingestion_task,
     update_status,
 )
-from app.ingestion.github_client import clone_or_fetch, parse_repo_url
+from app.ingestion.github_client import clone_or_fetch, list_branches, parse_repo_url
 from app.models import Answer, QueryRequest, RepoStatus
 from app.pipeline import run_query
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_BRANCH_CACHE: dict[str, tuple[float, str, list[str]]] = {}
+_BRANCH_CACHE_TTL = 60.0
+
+
+def _get_branches_cached(repo_url: str) -> tuple[str, list[str]]:
+    now = time.time()
+    cached = _BRANCH_CACHE.get(repo_url)
+    if cached:
+        cached_time, default_branch, branches = cached
+        if now - cached_time < _BRANCH_CACHE_TTL:
+            return default_branch, branches
+
+    default_branch, branches = list_branches(repo_url)
+    _BRANCH_CACHE[repo_url] = (now, default_branch, branches)
+    return default_branch, branches
+
+
+@router.get(
+    "/branches",
+    response_model=BranchListResponse,
+    summary="List branches for a GitHub repository",
+)
+def get_repository_branches(repo_url: str) -> BranchListResponse:
+    try:
+        parse_repo_url(repo_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    try:
+        default_branch, branches = _get_branches_cached(repo_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    truncated = False
+    if len(branches) > 200:
+        truncated = True
+        branches = branches[:200]
+
+    return BranchListResponse(
+        default_branch=default_branch,
+        branches=branches,
+        truncated=truncated,
+    )
 
 
 @router.post(
@@ -33,20 +80,64 @@ router = APIRouter()
 def register_repository(
     req: RepoCreateRequest,
     background_tasks: BackgroundTasks,
-) -> RepoCreateResponse:
+):
     try:
-        parse_repo_url(req.repo_url)
+        owner, repo_name = parse_repo_url(req.repo_url)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
-    repo_status = create_repo(req.repo_url, branch=req.branch)
+    try:
+        default_branch, branches = _get_branches_cached(req.repo_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    if req.branch:
+        if req.branch not in branches:
+            if len(branches) <= 10:
+                avail_str = ", ".join(branches)
+            else:
+                first_10 = ", ".join(branches[:10])
+                remaining = len(branches) - 10
+                avail_str = f"{first_10} (and {remaining} more)"
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Branch '{req.branch}' was not found. Available branches: {avail_str}",
+            )
+        resolved_branch = req.branch
+    else:
+        resolved_branch = default_branch
+
+    repo_id = make_repo_id(owner, repo_name, req.branch, default_branch)
+
+    existing = get_status(repo_id)
+    if existing is not None:
+        if existing.state in ("queued", "ingesting"):
+            return JSONResponse(
+                status_code=status.HTTP_202_ACCEPTED,
+                content={"repo_id": repo_id, "branch": resolved_branch},
+            )
+        if existing.state == "ready":
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "repo_id": repo_id,
+                    "branch": resolved_branch,
+                    "already_indexed": True,
+                },
+            )
+        # If existing is failed, we start a new ingestion with the same repo_id
+
+    create_repo(req.repo_url, branch=resolved_branch, repo_id=repo_id)
     background_tasks.add_task(
         run_ingestion_task,
         source=req.repo_url,
-        repo_id=repo_status.repo_id,
-        branch=req.branch,
+        repo_id=repo_id,
+        branch=resolved_branch,
     )
-    return RepoCreateResponse(repo_id=repo_status.repo_id)
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={"repo_id": repo_id, "branch": resolved_branch},
+    )
 
 
 @router.get(
@@ -118,8 +209,9 @@ def reindex_repository(
         run_ingestion_task,
         source=url,
         repo_id=repo_id,
+        branch=repo_status.branch,
     )
-    return RepoCreateResponse(repo_id=repo_id)
+    return RepoCreateResponse(repo_id=repo_id, branch=repo_status.branch)
 
 
 @router.post(

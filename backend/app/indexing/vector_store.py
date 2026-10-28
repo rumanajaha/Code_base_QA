@@ -1,5 +1,6 @@
 """ChromaDB vector store operations for code chunks."""
 
+import hashlib
 from pathlib import Path
 
 import chromadb
@@ -7,6 +8,19 @@ import chromadb
 from app.config import settings
 from app.indexing.embedder import get_embedder
 from app.models import Chunk, RetrievedItem
+
+
+def collection_name(repo_id: str) -> str:
+    """Generate a ChromaDB-compliant collection name (3-63 chars, [a-zA-Z0-9._-]).
+
+    If 'repo_' + repo_id is longer than 60 characters, uses the first 40 characters +
+    '-' + the first 8 hex characters of sha1(repo_id).
+    """
+    base = f"repo_{repo_id}"
+    if len(base) > 60:
+        h = hashlib.sha1(repo_id.encode("utf-8")).hexdigest()[:8]
+        return f"{base[:40]}-{h}"
+    return base
 
 
 class VectorStore:
@@ -21,7 +35,7 @@ class VectorStore:
             chroma_path = Path.cwd() / chroma_path
 
         self.client = chromadb.PersistentClient(path=str(chroma_path))
-        self.collection_name = f"repo_{repo_id}"
+        self.collection_name = collection_name(repo_id)
         self.collection = self.client.get_or_create_collection(
             name=self.collection_name,
             metadata={"hnsw:space": "cosine"},

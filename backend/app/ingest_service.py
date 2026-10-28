@@ -1,8 +1,8 @@
-"""Ingestion service and repository status registry."""
-
+import hashlib
 import json
 import logging
 from pathlib import Path
+import re
 import shutil
 import threading
 from typing import Callable
@@ -17,7 +17,7 @@ from app.indexing.graph_store import (
     write_chunks,
     write_edges,
 )
-from app.indexing.vector_store import VectorStore
+from app.indexing.vector_store import VectorStore, collection_name
 from app.ingestion.file_filter import list_source_files
 from app.ingestion.github_client import clone_or_fetch, parse_repo_url
 from app.models import RepoStatus
@@ -29,6 +29,24 @@ logger = logging.getLogger(__name__)
 
 REGISTRY_PATH = Path("data/repos.json")
 _registry_lock = threading.Lock()
+
+
+def make_repo_id(owner: str, repo: str, branch: str | None, default_branch: str) -> str:
+    """Compute repository identifier considering owner, repo name, and branch.
+
+    If branch is None or equals default_branch, returns f"{owner}__{repo}".
+    Otherwise returns f"{owner}__{repo}__{slug}", where slug replaces characters
+    outside [A-Za-z0-9._-] with '-', and appends a 6-hex sha1 hash if the slug differs
+    from branch name to avoid collisions.
+    """
+    if branch is None or branch == default_branch:
+        return f"{owner}__{repo}"
+
+    slug = re.sub(r"[^A-Za-z0-9._-]", "-", branch)
+    if slug != branch:
+        h = hashlib.sha1(branch.encode("utf-8")).hexdigest()[:6]
+        slug = f"{slug}-{h}"
+    return f"{owner}__{repo}__{slug}"
 
 
 def _load_registry() -> dict[str, dict]:
@@ -45,15 +63,18 @@ def _save_registry(registry: dict[str, dict]) -> None:
     REGISTRY_PATH.write_text(json.dumps(registry, indent=2), encoding="utf-8")
 
 
-def create_repo(url: str, branch: str | None = None) -> RepoStatus:
+def create_repo(url: str, branch: str | None = None, repo_id: str | None = None) -> RepoStatus:
     """Register a new repository in queued state."""
-    if url.startswith("https://github.com/"):
-        owner, name = parse_repo_url(url)
-        repo_id = f"{owner}__{name}"
-        root_path = str((Path(settings.REPOS_DIR) / repo_id).resolve())
+    if repo_id is None:
+        if url.startswith("https://github.com/"):
+            owner, name = parse_repo_url(url)
+            repo_id = f"{owner}__{name}"
+            root_path = str((Path(settings.REPOS_DIR) / repo_id).resolve())
+        else:
+            root_path = str(Path(url).resolve())
+            repo_id = Path(url).stem
     else:
-        root_path = str(Path(url).resolve())
-        repo_id = Path(url).stem
+        root_path = str((Path(settings.REPOS_DIR) / repo_id).resolve())
 
     status = RepoStatus(
         repo_id=repo_id,
@@ -141,6 +162,8 @@ def delete_repo(repo_id: str) -> None:
             f"{repo_id}__naive",
             f"repo_{repo_id}",
             f"repo_{repo_id}__naive",
+            collection_name(repo_id),
+            collection_name(f"{repo_id}__naive"),
         }
         for name in target_collections:
             try:
@@ -188,7 +211,7 @@ def ingest_repository(
     if str(source).startswith("https://github.com/"):
         if on_progress:
             on_progress("cloning", progress=15)
-        repo_path = clone_or_fetch(str(source), branch=branch)
+        repo_path = clone_or_fetch(str(source), branch=branch, repo_id=repo_id)
     else:
         repo_path = Path(source).resolve()
         if not repo_path.is_dir():
